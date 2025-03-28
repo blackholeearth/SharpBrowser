@@ -109,9 +109,6 @@ namespace SharpBrowser.Controls // Your namespace
             // Use the selected calculation method
             switch (lay_PerformLayout_calcMethod_No)
             {
-                case 1:
-                    PerformStackLayout_v1(); // Note: User reported issues
-                    break;
                 case 4:
                     PerformStackLayout_v4();
                     break;
@@ -628,8 +625,6 @@ namespace SharpBrowser.Controls // Your namespace
             finally { _isPerformingLayout = false; Debug.WriteLine($"StackLayout DEBUG: <--- Finished PerformStackLayout_v{lay_PerformLayout_calcMethod_No}"); }
         } // End PerformStackLayout_old_v0
 
-
-
         // --- Other Layout Methods (v1, v4) ---
         // IMPORTANT: You would need to apply the same flow/floating separation logic
         // to PerformStackLayout_v1 and PerformStackLayout_v4 if you intend to use
@@ -638,25 +633,6 @@ namespace SharpBrowser.Controls // Your namespace
         // 2. Perform main calculations/loops ONLY on flowControls
         // 3. Add the loop to position floatingControls at the end
         // 4. Adjust AutoScrollMinSize based on flowControls
-        private void PerformStackLayout_v1()
-        {
-            Debug.WriteLine("StackLayout WARNING: PerformStackLayout_v1 does not currently support floating controls.");
-            // TODO: Implement floating logic here if needed, similar to v0
-            // For now, call the original logic (or comment out/throw exception)
-            // Original_PerformStackLayout_v1(); // Assuming you renamed the old one
-            base.OnLayout(new LayoutEventArgs(this, "")); // Minimal fallback
-            _isPerformingLayout = false; // Need to ensure flag is handled if implementing
-        }
-        private void PerformStackLayout_v4_outdatedd()
-        {
-            Debug.WriteLine("StackLayout WARNING: PerformStackLayout_v4 does not currently support floating controls.");
-            // TODO: Implement floating logic here if needed, similar to v0
-            // For now, call the original logic (or comment out/throw exception)
-            // Original_PerformStackLayout_v4(); // Assuming you renamed the old one
-            base.OnLayout(new LayoutEventArgs(this, "")); // Minimal fallback
-            _isPerformingLayout = false; // Need to ensure flag is handled if implementing
-        }
-
         private void PerformStackLayout_v4()
         {
             // Prevent re-entrancy
