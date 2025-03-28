@@ -7,16 +7,32 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Drawing;
 
-namespace SharpBrowser.Controls 
+
+using System;
+using System.ComponentModel;
+using System.Drawing;
+using System.Windows.Forms;
+
+namespace SharpBrowser.Controls // Your specified namespace
 {
+    /// <summary>
+    /// Defines the orientation for stacking controls within the StackLayout.
+    /// </summary>
+    public enum StackOrientation
+    {
+        Vertical,
+        Horizontal
+    }
+
     public class StackLayout : Panel
     {
-        private int _spacing = 3; // Default spacing between controls
+        private int _spacing = 3;
+        private StackOrientation _orientation = StackOrientation.Vertical; // Default orientation
 
         // --- Properties ---
 
         [DefaultValue(3)]
-        [Description("The vertical space in pixels between stacked controls.")]
+        [Description("The space in pixels between stacked controls.")]
         [Category("Layout")]
         public int Spacing
         {
@@ -26,14 +42,32 @@ namespace SharpBrowser.Controls
                 if (_spacing != value)
                 {
                     _spacing = value;
-                    // Trigger a layout recalculation when spacing changes
                     PerformLayout();
-                    Invalidate(); // Ensure repaint
+                    Invalidate();
                 }
             }
         }
 
-        // Optional: Hide properties that don't make sense for StackLayout
+        // --- NEW ORIENTATION PROPERTY ---
+        [DefaultValue(StackOrientation.Vertical)]
+        [Description("Specifies the direction in which child controls are stacked.")]
+        [Category("Layout")]
+        public StackOrientation Orientation
+        {
+            get { return _orientation; }
+            set
+            {
+                if (_orientation != value)
+                {
+                    _orientation = value;
+                    PerformLayout(); // Trigger layout recalculation when orientation changes
+                    Invalidate(); // Ensure repaint
+                }
+            }
+        }
+        // --- END NEW PROPERTY ---
+
+
         [Browsable(false)]
         [EditorBrowsable(EditorBrowsableState.Never)]
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -45,140 +79,144 @@ namespace SharpBrowser.Controls
         public override DockStyle Dock { get => base.Dock; set => base.Dock = value; }
 
 
-        // --- Constructor ---
-
         public StackLayout()
         {
-            // Optional: Set some default styles useful for layout panels
-            // AutoScroll = true; // Automatically add scrollbars if content overflows
+            // AutoScroll = true; // Enable if needed
         }
 
 
         // --- Layout Logic ---
 
-        /// <summary>
-        /// Overrides the default layout logic to stack controls vertically.
-        /// </summary>
-        /// <param name="levent">Layout event arguments.</param>
         protected override void OnLayout(LayoutEventArgs levent)
         {
-            base.OnLayout(levent); // Call base class layout
-            PerformVerticalStackLayout();
+            base.OnLayout(levent);
+            PerformStackLayout(); // Call the updated layout method
         }
 
         /// <summary>
-        /// Arranges the visible child controls vertically.
+        /// Arranges the visible child controls based on the Orientation property.
         /// </summary>
-        private void PerformVerticalStackLayout()
+        private void PerformStackLayout()
         {
-            // Use DisplayRectangle to account for Padding and Scroll position
+            if (this.Controls.Count == 0)
+            {
+                if (AutoScroll) AutoScrollMinSize = Size.Empty; // Reset scroll size if empty
+                return;
+            }
+
             Rectangle displayRect = this.DisplayRectangle;
-            int currentY = displayRect.Top;
+            int currentPos = 0; // Will be Y for Vertical, X for Horizontal
             bool firstVisibleControl = true;
 
-            // Performance optimization: Suspend layout for children during repositioning
             this.SuspendLayout();
 
-            foreach (Control child in this.Controls)
+            if (_orientation == StackOrientation.Vertical)
             {
-                if (!child.Visible)
+                // --- Vertical Stacking Logic ---
+                currentPos = displayRect.Top;
+                int availableWidth = displayRect.Width;
+
+                foreach (Control child in this.Controls)
                 {
-                    continue; // Skip invisible controls
+                    if (!child.Visible) continue;
+
+                    if (!firstVisibleControl) currentPos += _spacing; else firstVisibleControl = false;
+
+                    int childWidth = availableWidth; // Stretch width
+
+                    // Optional: Respect child's Max/Min Width
+                    if (child.MaximumSize.Width > 0 && childWidth > child.MaximumSize.Width) childWidth = child.MaximumSize.Width;
+                    if (childWidth < child.MinimumSize.Width) childWidth = child.MinimumSize.Width;
+
+                    // Set bounds (X, Y, Width, Height)
+                    child.SetBounds(displayRect.Left, currentPos, childWidth, child.Height, BoundsSpecified.Location | BoundsSpecified.Width);
+
+                    currentPos += child.Height;
                 }
 
-                // Add spacing before the control, but not before the very first one
-                if (!firstVisibleControl)
+                // Update AutoScrollMinSize for Vertical
+                if (AutoScroll)
                 {
-                    currentY += _spacing;
+                    int requiredHeight = currentPos - displayRect.Top + Padding.Bottom;
+                    int requiredWidth = availableWidth; // Usually panel width for vertical
+                    this.AutoScrollMinSize = new Size(requiredWidth, requiredHeight);
                 }
-                else
-                {
-                    firstVisibleControl = false;
-                }
-
-                // Respect the child's margin (optional, adds complexity)
-                // currentY += child.Margin.Top;
-
-                // --- Positioning ---
-                // Set the child's location and width. Height is determined by the child itself.
-                // We use SetBoundsCore for potentially better performance and to avoid recursive layout calls.
-                // Parameters: X, Y, Width, Height, Specified flag (indicates which bounds are being set)
-                int childWidth = displayRect.Width; // Stretch width to fill panel (minus padding)
-
-                // Optional: Respect child's Maximum/Minimum Size for Width
-                if (child.MaximumSize.Width > 0 && childWidth > child.MaximumSize.Width)
-                {
-                    childWidth = child.MaximumSize.Width;
-                }
-                if (childWidth < child.MinimumSize.Width)
-                {
-                    childWidth = child.MinimumSize.Width;
-                }
-
-
-                // Set the bounds
-                // Using child.Bounds = new Rectangle(...) can sometimes trigger extra layout cycles.
-                // SetBoundsCore is generally preferred within OnLayout overrides.
-                child.SetBounds(
-                    displayRect.Left, // + child.Margin.Left (if respecting margins)
-                    currentY,
-                    childWidth,       // - child.Margin.Left - child.Margin.Right (if respecting margins)
-                    child.Height,     // Use the child's current height
-                    BoundsSpecified.Location | BoundsSpecified.Width // Specify we are setting Location (X,Y) and Width
-                );
-                // Note: We let the child control manage its own Height. If you wanted the StackLayout
-                // to *force* a height, you'd include BoundsSpecified.Height and calculate it.
-
-                // Update Y for the next control
-                currentY += child.Height; // + child.Margin.Bottom (if respecting margins)
-
-            } // End foreach loop
-
-            // Resume layout after all controls are positioned
-            this.ResumeLayout(true); // true performs a layout if one was pending
-
-            // --- AutoScroll MinSize ---
-            // If AutoScroll is true, update the virtual size needed to contain controls
-            if (AutoScroll)
-            {
-                int requiredHeight = currentY - displayRect.Top + Padding.Bottom; // Calculate total content height
-                int requiredWidth = displayRect.Width; // Width is determined by panel width
-
-                // Calculate the minimum size required to display all content without scrolling
-                this.AutoScrollMinSize = new Size(requiredWidth, requiredHeight);
             }
+            else // --- Horizontal Stacking Logic ---
+            {
+                currentPos = displayRect.Left;
+                int availableHeight = displayRect.Height;
+
+                foreach (Control child in this.Controls)
+                {
+                    if (!child.Visible) continue;
+
+                    if (!firstVisibleControl) currentPos += _spacing; else firstVisibleControl = false;
+
+                    int childHeight = availableHeight; // Stretch height
+
+                    // Optional: Respect child's Max/Min Height
+                    if (child.MaximumSize.Height > 0 && childHeight > child.MaximumSize.Height) childHeight = child.MaximumSize.Height;
+                    if (childHeight < child.MinimumSize.Height) childHeight = child.MinimumSize.Height;
+
+
+                    // Set bounds (X, Y, Width, Height)
+                    child.SetBounds(currentPos, displayRect.Top, child.Width, childHeight, BoundsSpecified.Location | BoundsSpecified.Height);
+
+                    currentPos += child.Width;
+                }
+
+                // Update AutoScrollMinSize for Horizontal
+                if (AutoScroll)
+                {
+                    int requiredWidth = currentPos - displayRect.Left + Padding.Right;
+                    int requiredHeight = availableHeight; // Usually panel height for horizontal
+                    this.AutoScrollMinSize = new Size(requiredWidth, requiredHeight);
+                }
+            }
+
+
+            this.ResumeLayout(true);
         }
 
 
         // --- Optional Overrides to Trigger Layout ---
-
-        // Called when a control is added
+        // (These remain the same)
         protected override void OnControlAdded(ControlEventArgs e)
         {
             base.OnControlAdded(e);
-            PerformLayout(); // Ensure layout is updated
-        }
-
-        // Called when a control is removed
-        protected override void OnControlRemoved(ControlEventArgs e)
-        {
-            base.OnControlRemoved(e);
-            // PerformLayout might be needed if removing affects scrollbars, etc.
-            // Often OnLayout is triggered automatically, but explicit call is safer.
+            // Add listener for child resize ONLY IF we need to react to it in horizontal mode
+            // e.Control.Resize += ChildControl_Resize;
             PerformLayout();
         }
 
-        // Called when padding changes
+        protected override void OnControlRemoved(ControlEventArgs e)
+        {
+            base.OnControlRemoved(e);
+            // Remove listener if added
+            // e.Control.Resize -= ChildControl_Resize;
+            PerformLayout();
+        }
+
         protected override void OnPaddingChanged(EventArgs e)
         {
             base.OnPaddingChanged(e);
             PerformLayout();
         }
 
-        // You might also need to handle child control's Resize or VisibleChanged events
-        // if AutoLayout doesn't catch them correctly in all scenarios, but start without
-        // this added complexity unless needed. OnLayout called during parent Resize
-        // usually handles most cases.
+        /* // Example handler if needed for Horizontal layout reacting to child width changes
+           // Generally not needed if child controls manage their own Width correctly.
+        private void ChildControl_Resize(object sender, EventArgs e)
+        {
+            // Only trigger layout if orientation is Horizontal AND the sender is a direct child
+            Control child = sender as Control;
+            if (_orientation == StackOrientation.Horizontal && child != null && child.Parent == this)
+            {
+                // Avoid potential recursive loops if possible, though PerforLayout should handle it
+                PerformLayout();
+            }
+        }
+        */
 
     } // End class StackLayout
-} // End namespace
+} // End namespace SharpBrowser.Controls
