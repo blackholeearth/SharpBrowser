@@ -33,7 +33,7 @@ namespace SharpBrowser.Controls // Your specified namespace
 
         [DefaultValue(3)]
         [Description("The space in pixels between stacked controls.")]
-        [Category("Layout")]
+        [Category("Layout2")]
         public int Spacing
         {
             get { return _spacing; }
@@ -51,7 +51,7 @@ namespace SharpBrowser.Controls // Your specified namespace
         // --- NEW ORIENTATION PROPERTY ---
         [DefaultValue(StackOrientation.Vertical)]
         [Description("Specifies the direction in which child controls are stacked.")]
-        [Category("Layout")]
+        [Category("Layout2")]
         public StackOrientation Orientation
         {
             get { return _orientation; }
