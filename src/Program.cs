@@ -20,6 +20,10 @@ namespace SharpBrowser
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
+            new Form2_testStackpanel().ShowDialog();
+            return;
+
             Application.Run(new MainForm());
         }
 
