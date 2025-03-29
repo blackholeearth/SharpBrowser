@@ -5,6 +5,7 @@ using System.ComponentModel.Design;
 using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
+
 using System.Windows.Forms;
 
 namespace SharpBrowser.Controls // Your namespace
@@ -21,6 +22,17 @@ namespace SharpBrowser.Controls // Your namespace
         Start,
         Center,
         End
+    }
+    public enum FloatAlignment
+    {
+        TopLeft,
+        ToLeftOf,
+        ToRightOf,
+        // Potential future additions:
+        // Above,
+        // Below,
+        // Center,
+        // TopRight, BottomLeft, BottomRight etc.
     }
 
     public class StackLayout : Panel
@@ -157,14 +169,8 @@ namespace SharpBrowser.Controls // Your namespace
 
         // --- Extender Finder (Simplified) ---
         // Returns the manually assigned provider.
-        private StackLayoutExtender FindExtender() => LayoutExtenderProvider;
-        // Keep the old one if you want a potential fallback mechanism
-        private StackLayoutExtender FindExtender_disabled()
-        {
-            // Original Site/Container based lookup logic here...
-            // (Code omitted for brevity as it's disabled by default now)
-            return null; // Return null if disabled logic doesn't find one
-        }
+        private StackLayoutExtender GetExtender() => LayoutExtenderProvider;
+        private StackLayoutExtender extender => LayoutExtenderProvider;
 
         // --- Core Layout Logic Switch ---
         protected override void OnLayout(LayoutEventArgs levent)
@@ -199,7 +205,7 @@ namespace SharpBrowser.Controls // Your namespace
             _isPerformingLayout = true;
             Debug.WriteLine($"StackLayout DEBUG: ---> Starting PerformStackLayout_v{lay_PerformLayout_calcMethod_No}");
 
-            StackLayoutExtender extender = this.LayoutExtenderProvider; // Use manual property
+            //StackLayoutExtender extender = this.LayoutExtenderProvider; // Use manual property
             if (extender == null && this.Controls.OfType<IComponent>().Any())
             {
                 var warnMSG = $"StackLayout WARNING: LayoutExtenderProvider is NULL in '{this.Name}', floating/expansion properties will not work!";
@@ -211,319 +217,31 @@ namespace SharpBrowser.Controls // Your namespace
             {
                 // --- 1. Separate Visible Controls into Flow and Floating ---
                 List<Control> flowControls, floatingControls;
-                Separate_Visible_Controls_into_Flow_and_Floating(extender, out flowControls, out floatingControls);
+                PL_p1__Separate_Visible_Controls_into_Flow_and_Floating( out flowControls, out floatingControls);
 
                 Rectangle displayRect = this.DisplayRectangle;
 
                 // --- 2. Handle Case of No Flow Controls ---
                 if (flowControls.Count == 0)
                 {
-                    Handle_Case_of_No_Flow_Controls(extender, floatingControls, displayRect);
+                    PL_p2__Handle_Case_of_No_Flow_Controls( floatingControls, displayRect);
                     return;
                 }
 
                 // --- 3. Layout Flow Controls ---
-                this.SuspendLayout();
-
-                double totalWeight = 0;
-                int totalPreferredSize = 0;
-                int expandingChildCount = 0;
-                var weights = new Dictionary<Control,int>();
-
-                foreach (Control child in flowControls)
-                {
-                    // Use prefixed method (or correct non-prefixed name)
-                    int weight = extender?.Getlay_ExpandWeight(child) ?? 0;
-                    weights[child] = weight;
-                    if (weight > 0)
-                    {
-                        totalWeight += weight;
-                        expandingChildCount++;
-                    }
-                    totalPreferredSize += (lay_Orientation == StackOrientation.Vertical) ? child.Height : child.Width;
-                }
-                Debug.WriteLine($"Flow Controls Calc: TotalWeight={totalWeight}, TotalPreferredSize={totalPreferredSize}, ExpandingCount={expandingChildCount}");
-
-                int totalSpacing = (flowControls.Count > 1) ? (flowControls.Count - 1) * lay_Spacing : 0;
-                int totalUsedBeforeExpand = totalPreferredSize + totalSpacing;
-                int availableSpace = (lay_Orientation == StackOrientation.Vertical) ? displayRect.Height : displayRect.Width;
-                double spaceToDistribute = Math.Max(0, availableSpace - totalUsedBeforeExpand);
-                Debug.WriteLine($"Space Calc: TotalSpacing={totalSpacing}, UsedBeforeExpand={totalUsedBeforeExpand}, Available={availableSpace}, ToDistribute={spaceToDistribute}");
-
-                double fractionalSpace = 0.0;
-                var extraSpaceMap = new Dictionary<Control,int>();
-                if (spaceToDistribute > 0 && totalWeight > 0)
-                {
-                    foreach (Control child in flowControls)
-                    {
-                        int weight = weights[child];
-                        if (weight > 0)
-                        {
-                            double exactShare = spaceToDistribute * (double)weight / totalWeight;
-                            int wholePixels = (int)Math.Floor(exactShare);
-                            extraSpaceMap[child] = wholePixels;
-                            fractionalSpace += exactShare - wholePixels;
-                        }
-                        else
-                        {
-                            extraSpaceMap[child] = 0;
-                        }
-                    }
-                    int leftoverPixels = (int)Math.Round(fractionalSpace);
-                    int distributedLeftovers = 0;
-                    if (leftoverPixels > 0 && expandingChildCount > 0)
-                    {
-                        foreach (Control child in flowControls)
-                        {
-                            if (weights[child] > 0)
-                            {
-                                if (!extraSpaceMap.ContainsKey(child)) extraSpaceMap[child] = 0;
-                                extraSpaceMap[child]++;
-                                distributedLeftovers++;
-                                if (distributedLeftovers >= leftoverPixels) break;
-                            }
-                        }
-                    }
-                    Debug.WriteLine($"Distributed extra space. Leftover pixels added: {distributedLeftovers}");
-                }
-                else
-                {
-                    foreach (Control child in flowControls) extraSpaceMap[child] = 0;
-                }
-
-                int currentPos = (lay_Orientation == StackOrientation.Vertical) ? displayRect.Top : displayRect.Left;
-                int maxCrossAxisSize = 0;
-                // Dictionary to store final LOCATION (Point) keyed by control NAME for flow controls.
-                var flowControlLocations = new Dictionary<string,
-                  Point>();
+                Dictionary<Control, int> weights, extraSpaceMap;
+                int currentPos, maxCrossAxisSize;
+                Dictionary<string, Point> flowControlLocations;
+                PL_p3__Layout_Flow_Controls( flowControls, displayRect, out weights, out extraSpaceMap, out currentPos, out maxCrossAxisSize, out flowControlLocations);
 
                 // --- Position FLOW Controls Loop ---
-                for (int i = 0; i < flowControls.Count; i++)
-                {
-                    Control child = flowControls[i];
-                    int weight = weights[child];
-                    int initialSizeAlongAxis = (lay_Orientation == StackOrientation.Vertical) ? child.Height : child.Width;
-                    int extraSpace = extraSpaceMap.ContainsKey(child) ? extraSpaceMap[child] : 0;
-                    int calculatedSizeAlongAxis = initialSizeAlongAxis + extraSpace;
-
-                    // Apply Min/Max constraints along orientation axis
-                    if (lay_Orientation == StackOrientation.Vertical)
-                    {
-                        if (child.MaximumSize.Height > 0 && calculatedSizeAlongAxis > child.MaximumSize.Height) calculatedSizeAlongAxis = child.MaximumSize.Height;
-                        if (calculatedSizeAlongAxis < child.MinimumSize.Height) calculatedSizeAlongAxis = child.MinimumSize.Height;
-                    }
-                    else
-                    {
-                        if (child.MaximumSize.Width > 0 && calculatedSizeAlongAxis > child.MaximumSize.Width) calculatedSizeAlongAxis = child.MaximumSize.Width;
-                        if (calculatedSizeAlongAxis < child.MinimumSize.Width) calculatedSizeAlongAxis = child.MinimumSize.Width;
-                    }
-
-                    int crossAxisPos, crossAxisSize;
-                    BoundsSpecified boundsSpec = BoundsSpecified.None;
-
-                    // Determine cross-axis position and size
-                    if (lay_Orientation == StackOrientation.Vertical)
-                    { // Vertical Stack -> Align Horizontally
-                        int availableWidth = displayRect.Width;
-                        crossAxisPos = displayRect.Left;
-                        switch (lay_ChildAxisAlignment)
-                        {
-                            case StackChildAxisAlignment.Stretch:
-                                crossAxisSize = availableWidth;
-                                if (child.MaximumSize.Width > 0 && crossAxisSize > child.MaximumSize.Width) crossAxisSize = child.MaximumSize.Width;
-                                if (crossAxisSize < child.MinimumSize.Width) crossAxisSize = child.MinimumSize.Width;
-                                boundsSpec |= BoundsSpecified.Width;
-                                break;
-                            case StackChildAxisAlignment.Center:
-                                crossAxisSize = child.Width;
-                                crossAxisPos += (availableWidth - crossAxisSize) / 2;
-                                if (crossAxisPos < displayRect.Left) crossAxisPos = displayRect.Left;
-                                break;
-                            case StackChildAxisAlignment.End:
-                                crossAxisSize = child.Width;
-                                crossAxisPos += availableWidth - crossAxisSize;
-                                if (crossAxisPos < displayRect.Left) crossAxisPos = displayRect.Left;
-                                break;
-                            case StackChildAxisAlignment.Start:
-                            default:
-                                crossAxisSize = child.Width;
-                                break;
-                        }
-                        // Set bounds for flow control
-                        child.SetBounds(crossAxisPos, currentPos, crossAxisSize, calculatedSizeAlongAxis, BoundsSpecified.Location | BoundsSpecified.Height | boundsSpec);
-                        // Store final location (Top-Left corner)
-                        if (!string.IsNullOrEmpty(child.Name)) flowControlLocations[child.Name] = new Point(crossAxisPos, currentPos);
-                        maxCrossAxisSize = Math.Max(maxCrossAxisSize, crossAxisSize); // Update max cross size
-                        currentPos += calculatedSizeAlongAxis; // Advance main axis position
-                    }
-                    else
-                    { // Horizontal Stack -> Align Vertically
-                        int availableHeight = displayRect.Height;
-                        crossAxisPos = displayRect.Top;
-                        switch (lay_ChildAxisAlignment)
-                        {
-                            case StackChildAxisAlignment.Stretch:
-                                crossAxisSize = availableHeight;
-                                if (child.MaximumSize.Height > 0 && crossAxisSize > child.MaximumSize.Height) crossAxisSize = child.MaximumSize.Height;
-                                if (crossAxisSize < child.MinimumSize.Height) crossAxisSize = child.MinimumSize.Height;
-                                boundsSpec |= BoundsSpecified.Height;
-                                break;
-                            case StackChildAxisAlignment.Center:
-                                crossAxisSize = child.Height;
-                                crossAxisPos += (availableHeight - crossAxisSize) / 2;
-                                if (crossAxisPos < displayRect.Top) crossAxisPos = displayRect.Top;
-                                break;
-                            case StackChildAxisAlignment.End:
-                                crossAxisSize = child.Height;
-                                crossAxisPos += availableHeight - crossAxisSize;
-                                if (crossAxisPos < displayRect.Top) crossAxisPos = displayRect.Top;
-                                break;
-                            case StackChildAxisAlignment.Start:
-                            default:
-                                crossAxisSize = child.Height;
-                                break;
-                        }
-                        // Set bounds for flow control
-                        child.SetBounds(currentPos, crossAxisPos, calculatedSizeAlongAxis, crossAxisSize, BoundsSpecified.Location | BoundsSpecified.Width | boundsSpec);
-                        // Store final location (Top-Left corner)
-                        if (!string.IsNullOrEmpty(child.Name)) flowControlLocations[child.Name] = new Point(currentPos, crossAxisPos);
-                        maxCrossAxisSize = Math.Max(maxCrossAxisSize, crossAxisSize); // Update max cross size
-                        currentPos += calculatedSizeAlongAxis; // Advance main axis position
-                    }
-                    // Add spacing between flow controls
-                    if (i < flowControls.Count - 1) currentPos += lay_Spacing;
-                }
-                int contentEndPos = currentPos; // Store final position after last flow control
-                Debug.WriteLine($"Finished positioning Flow Controls. Content End: {contentEndPos}");
+                int contentEndPos = PL_p4__Position_FLOW_Controls_Loop(flowControls, displayRect, weights, extraSpaceMap, ref currentPos, ref maxCrossAxisSize, flowControlLocations);
 
                 // --- 4. Position Floating Controls ---
-                if (floatingControls.Count > 0 && extender != null)
-                {
-                    Debug.WriteLine("Positioning Floating Controls...");
-                    foreach (Control floater in floatingControls)
-                    {
-                        // Get all relevant properties using prefixed names
-                        string targetName = extender.Getlay_FloatTargetName(floater);
-                        int offsetX = extender.Getlay_FloatOffsetX(floater);
-                        int offsetY = extender.Getlay_FloatOffsetY(floater);
-                        FloatAlignment alignment = extender.Getlay_FloatAlignment(floater); // Get alignment
-
-                        int baseX = 0, baseY = 0;
-                        int finalX, finalY; // Declare here
-                        Control targetControl = null;
-
-                        // Try find target control instance directly from flowControls list
-                        if (!string.IsNullOrEmpty(targetName))
-                        {
-                            targetControl = flowControls.FirstOrDefault(fc => fc.Name == targetName);
-                        }
-
-                        // Calculate position based on whether target was found
-                        if (targetControl != null) // Target FOUND and was part of the flow layout
-                        {
-                            Debug.WriteLine($"  Floater '{floater.Name}' -> Target '{targetName}' FOUND.");
-                            // Retrieve the final location we stored earlier
-                            Point targetPos = flowControlLocations[targetName]; // Use stored location
-
-                            // Calculate BASE position based on alignment mode and stored location
-                            switch (alignment)
-                            {
-                                case FloatAlignment.ToLeftOf:
-                                    baseX = targetPos.X - floater.Width; // Use stored X
-                                    baseY = targetPos.Y; // Use stored Y
-                                    Debug.WriteLine($"    Mode: ToLeftOf, Base=({baseX},{baseY})");
-                                    break;
-                                case FloatAlignment.ToRightOf:
-                                    // Need target's Width for Right edge. Get from targetControl instance.
-                                    baseX = targetPos.X + targetControl.Width;
-                                    baseY = targetPos.Y; // Use stored Y
-                                    Debug.WriteLine($"    Mode: ToRightOf, Base=({baseX},{baseY})");
-                                    break;
-                                case FloatAlignment.TopLeft:
-                                default:
-                                    baseX = targetPos.X; // Use stored X
-                                    baseY = targetPos.Y; // Use stored Y
-                                    Debug.WriteLine($"    Mode: TopLeft, Base=({baseX},{baseY})");
-                                    break;
-                            }
-                            // Apply offsets
-                            finalX = baseX + offsetX;
-                            finalY = baseY + offsetY;
-                            Debug.WriteLine($"    Offsets=({offsetX},{offsetY}), Final=({finalX},{finalY})");
-                        }
-                        else // Target NOT found (or name was empty) - Use Fallback
-                        {
-                            baseX = displayRect.Left;
-                            baseY = displayRect.Top;
-                            finalX = baseX + offsetX; // Assign in fallback path
-                            finalY = baseY + offsetY; // Assign in fallback path
-                            Debug.WriteLine($"  Floater '{floater.Name}' -> Target '{targetName}' NOT FOUND/Invalid. Fallback Pos: ({finalX},{finalY})");
-                        }
-
-                        // --- Set Bounds (finalX/Y are now guaranteed to be assigned) ---
-                        floater.SetBounds(finalX, finalY, floater.Width, floater.Height, BoundsSpecified.Location);
-
-                        // --- Apply Z-Order: Place Floater BEHIND Target (if target exists) ---
-                        if (targetControl != null)
-                        {
-                            try // Add try-catch for safety when manipulating Controls collection
-                            {
-                                int floaterIndex = this.Controls.GetChildIndex(floater);
-                                int targetIndex = this.Controls.GetChildIndex(targetControl);
-                                // Only move if floater is currently in front of target
-                                if (floaterIndex > targetIndex)
-                                {
-                                    this.Controls.SetChildIndex(floater, targetIndex); // Move just behind target
-                                    Debug.WriteLine($"    Z-Index set behind Target '{targetControl.Name}'");
-                                }
-                            }
-                            catch (Exception zEx)
-                            {
-                                Debug.WriteLine($"    ERROR setting Z-Index for {floater.Name}: {zEx.Message}");
-                            }
-                        }
-                        else
-                        {
-                            // Fallback Z-order for untargeted floaters (e.g., send to back)
-                            floater.SendToBack();
-                            Debug.WriteLine($"    Z-Index set to Back (untargeted)");
-                        }
-
-                    } // End foreach floater
-                } // End if floatingControls
+                PL_p5__Position_Floating_Controls( flowControls, floatingControls, displayRect, flowControlLocations);
 
                 // --- 5. Calculate AutoScrollMinSize based on FLOW controls ---
-                if (AutoScroll)
-                {
-                    if (lay_Orientation == StackOrientation.Vertical)
-                    {
-                        int requiredHeight = contentEndPos - displayRect.Top + Padding.Bottom;
-                        int requiredWidth = displayRect.Width;
-                        if (lay_ChildAxisAlignment != StackChildAxisAlignment.Stretch)
-                        {
-                            requiredWidth = maxCrossAxisSize + Padding.Left + Padding.Right;
-                        }
-                        requiredWidth = Math.Max(displayRect.Width, requiredWidth);
-                        this.AutoScrollMinSize = new Size(requiredWidth, requiredHeight);
-                    }
-                    else
-                    {
-                        int requiredWidth = contentEndPos - displayRect.Left + Padding.Right;
-                        int requiredHeight = displayRect.Height;
-                        if (lay_ChildAxisAlignment != StackChildAxisAlignment.Stretch)
-                        {
-                            requiredHeight = maxCrossAxisSize + Padding.Top + Padding.Bottom;
-                        }
-                        requiredHeight = Math.Max(displayRect.Height, requiredHeight);
-                        this.AutoScrollMinSize = new Size(requiredWidth, requiredHeight);
-                    }
-                    Debug.WriteLine($"Setting AutoScrollMinSize based on Flow Controls to: {this.AutoScrollMinSize}");
-
-                }
-                else
-                {
-                    this.AutoScrollMinSize = Size.Empty;
-                }
+                PL_p6__Calculate_AutoScrollMinSize_based_on_FLOW_controls(displayRect, maxCrossAxisSize, contentEndPos);
 
                 // --- Resume Layout ---
                 this.ResumeLayout(true); // Force immediate layout
@@ -538,8 +256,32 @@ namespace SharpBrowser.Controls // Your namespace
                 Debug.WriteLine($"StackLayout DEBUG: <--- Finished PerformStackLayout_v{lay_PerformLayout_calcMethod_No}");
             }
         } // End PerformStackLayout_old_v0
-
-        private void Handle_Case_of_No_Flow_Controls(StackLayoutExtender extender, List<Control> floatingControls, Rectangle displayRect)
+        private void PL_p1__Separate_Visible_Controls_into_Flow_and_Floating( out List<Control> flowControls, out List<Control> floatingControls)
+        {
+            var allVisibleControls = this.Controls.OfType<Control>().Where(c => c.Visible).ToList();
+            flowControls = new List<Control>();
+            floatingControls = new List<Control>();
+            if (extender != null)
+            {
+                foreach (Control child in allVisibleControls)
+                {
+                    if (extender.Getlay_IsFloating(child))
+                    {
+                        floatingControls.Add(child);
+                    }
+                    else
+                    {
+                        flowControls.Add(child);
+                    }
+                }
+            }
+            else
+            {
+                flowControls.AddRange(allVisibleControls);
+            } // No extender, all are flow
+            Debug.WriteLine($"Layout Pass: Flow Controls ({flowControls.Count}), Floating Controls ({floatingControls.Count})");
+        }
+        private void PL_p2__Handle_Case_of_No_Flow_Controls(List<Control> floatingControls, Rectangle displayRect)
         {
             Debug.WriteLine("No flow controls to layout.");
             if (floatingControls.Count > 0 && extender != null)
@@ -570,31 +312,317 @@ namespace SharpBrowser.Controls // Your namespace
             _isPerformingLayout = false; // Reset flag before returning
             Debug.WriteLine($"StackLayout DEBUG: <--- Finished PerformStackLayout (No Flow Controls)");
         }
-        private void Separate_Visible_Controls_into_Flow_and_Floating(StackLayoutExtender extender, out List<Control> flowControls, out List<Control> floatingControls)
+        private void PL_p3__Layout_Flow_Controls(List<Control> flowControls, Rectangle displayRect, out Dictionary<Control, int> weights, 
+            out Dictionary<Control, int> extraSpaceMap, out int currentPos, out int maxCrossAxisSize, out Dictionary<string, Point> flowControlLocations)
         {
-            var allVisibleControls = this.Controls.OfType<Control>().Where(c => c.Visible).ToList();
-            flowControls = new List<Control>();
-            floatingControls = new List<Control>();
-            if (extender != null)
+            this.SuspendLayout();
+
+            double totalWeight = 0;
+            int totalPreferredSize = 0;
+            int expandingChildCount = 0;
+            weights = new Dictionary<Control, int>();
+            foreach (Control child in flowControls)
             {
-                foreach (Control child in allVisibleControls)
+                // Use prefixed method (or correct non-prefixed name)
+                int weight = extender?.Getlay_ExpandWeight(child) ?? 0;
+                weights[child] = weight;
+                if (weight > 0)
                 {
-                    if (extender.Getlay_IsFloating(child))
+                    totalWeight += weight;
+                    expandingChildCount++;
+                }
+                totalPreferredSize += (lay_Orientation == StackOrientation.Vertical) ? child.Height : child.Width;
+            }
+            Debug.WriteLine($"Flow Controls Calc: TotalWeight={totalWeight}, TotalPreferredSize={totalPreferredSize}, ExpandingCount={expandingChildCount}");
+
+            int totalSpacing = (flowControls.Count > 1) ? (flowControls.Count - 1) * lay_Spacing : 0;
+            int totalUsedBeforeExpand = totalPreferredSize + totalSpacing;
+            int availableSpace = (lay_Orientation == StackOrientation.Vertical) ? displayRect.Height : displayRect.Width;
+            double spaceToDistribute = Math.Max(0, availableSpace - totalUsedBeforeExpand);
+            Debug.WriteLine($"Space Calc: TotalSpacing={totalSpacing}, UsedBeforeExpand={totalUsedBeforeExpand}, Available={availableSpace}, ToDistribute={spaceToDistribute}");
+
+            double fractionalSpace = 0.0;
+            extraSpaceMap = new Dictionary<Control, int>();
+            if (spaceToDistribute > 0 && totalWeight > 0)
+            {
+                foreach (Control child in flowControls)
+                {
+                    int weight = weights[child];
+                    if (weight > 0)
                     {
-                        floatingControls.Add(child);
+                        double exactShare = spaceToDistribute * (double)weight / totalWeight;
+                        int wholePixels = (int)Math.Floor(exactShare);
+                        extraSpaceMap[child] = wholePixels;
+                        fractionalSpace += exactShare - wholePixels;
                     }
                     else
                     {
-                        flowControls.Add(child);
+                        extraSpaceMap[child] = 0;
                     }
                 }
+                int leftoverPixels = (int)Math.Round(fractionalSpace);
+                int distributedLeftovers = 0;
+                if (leftoverPixels > 0 && expandingChildCount > 0)
+                {
+                    foreach (Control child in flowControls)
+                    {
+                        if (weights[child] > 0)
+                        {
+                            if (!extraSpaceMap.ContainsKey(child)) extraSpaceMap[child] = 0;
+                            extraSpaceMap[child]++;
+                            distributedLeftovers++;
+                            if (distributedLeftovers >= leftoverPixels) break;
+                        }
+                    }
+                }
+                Debug.WriteLine($"Distributed extra space. Leftover pixels added: {distributedLeftovers}");
             }
             else
             {
-                flowControls.AddRange(allVisibleControls);
-            } // No extender, all are flow
-            Debug.WriteLine($"Layout Pass: Flow Controls ({flowControls.Count}), Floating Controls ({floatingControls.Count})");
+                foreach (Control child in flowControls) extraSpaceMap[child] = 0;
+            }
+
+            currentPos = (lay_Orientation == StackOrientation.Vertical) ? displayRect.Top : displayRect.Left;
+            maxCrossAxisSize = 0;
+            // Dictionary to store final LOCATION (Point) keyed by control NAME for flow controls.
+            flowControlLocations = new Dictionary<string, Point>();
         }
+        private int PL_p4__Position_FLOW_Controls_Loop(List<Control> flowControls, Rectangle displayRect, Dictionary<Control, int> weights, 
+            Dictionary<Control, int> extraSpaceMap, ref int currentPos, ref int maxCrossAxisSize, Dictionary<string, Point> flowControlLocations)
+        {
+            for (int i = 0; i < flowControls.Count; i++)
+            {
+                Control child = flowControls[i];
+                int weight = weights[child];
+                int initialSizeAlongAxis = (lay_Orientation == StackOrientation.Vertical) ? child.Height : child.Width;
+                int extraSpace = extraSpaceMap.ContainsKey(child) ? extraSpaceMap[child] : 0;
+                int calculatedSizeAlongAxis = initialSizeAlongAxis + extraSpace;
+
+                // Apply Min/Max constraints along orientation axis
+                if (lay_Orientation == StackOrientation.Vertical)
+                {
+                    if (child.MaximumSize.Height > 0 && calculatedSizeAlongAxis > child.MaximumSize.Height) calculatedSizeAlongAxis = child.MaximumSize.Height;
+                    if (calculatedSizeAlongAxis < child.MinimumSize.Height) calculatedSizeAlongAxis = child.MinimumSize.Height;
+                }
+                else
+                {
+                    if (child.MaximumSize.Width > 0 && calculatedSizeAlongAxis > child.MaximumSize.Width) calculatedSizeAlongAxis = child.MaximumSize.Width;
+                    if (calculatedSizeAlongAxis < child.MinimumSize.Width) calculatedSizeAlongAxis = child.MinimumSize.Width;
+                }
+
+                int crossAxisPos, crossAxisSize;
+                BoundsSpecified boundsSpec = BoundsSpecified.None;
+
+                // Determine cross-axis position and size
+                if (lay_Orientation == StackOrientation.Vertical)
+                { // Vertical Stack -> Align Horizontally
+                    int availableWidth = displayRect.Width;
+                    crossAxisPos = displayRect.Left;
+                    switch (lay_ChildAxisAlignment)
+                    {
+                        case StackChildAxisAlignment.Stretch:
+                            crossAxisSize = availableWidth;
+                            if (child.MaximumSize.Width > 0 && crossAxisSize > child.MaximumSize.Width) crossAxisSize = child.MaximumSize.Width;
+                            if (crossAxisSize < child.MinimumSize.Width) crossAxisSize = child.MinimumSize.Width;
+                            boundsSpec |= BoundsSpecified.Width;
+                            break;
+                        case StackChildAxisAlignment.Center:
+                            crossAxisSize = child.Width;
+                            crossAxisPos += (availableWidth - crossAxisSize) / 2;
+                            if (crossAxisPos < displayRect.Left) crossAxisPos = displayRect.Left;
+                            break;
+                        case StackChildAxisAlignment.End:
+                            crossAxisSize = child.Width;
+                            crossAxisPos += availableWidth - crossAxisSize;
+                            if (crossAxisPos < displayRect.Left) crossAxisPos = displayRect.Left;
+                            break;
+                        case StackChildAxisAlignment.Start:
+                        default:
+                            crossAxisSize = child.Width;
+                            break;
+                    }
+                    // Set bounds for flow control
+                    child.SetBounds(crossAxisPos, currentPos, crossAxisSize, calculatedSizeAlongAxis, BoundsSpecified.Location | BoundsSpecified.Height | boundsSpec);
+                    // Store final location (Top-Left corner)
+                    if (!string.IsNullOrEmpty(child.Name)) flowControlLocations[child.Name] = new Point(crossAxisPos, currentPos);
+                    maxCrossAxisSize = Math.Max(maxCrossAxisSize, crossAxisSize); // Update max cross size
+                    currentPos += calculatedSizeAlongAxis; // Advance main axis position
+                }
+                else
+                { // Horizontal Stack -> Align Vertically
+                    int availableHeight = displayRect.Height;
+                    crossAxisPos = displayRect.Top;
+                    switch (lay_ChildAxisAlignment)
+                    {
+                        case StackChildAxisAlignment.Stretch:
+                            crossAxisSize = availableHeight;
+                            if (child.MaximumSize.Height > 0 && crossAxisSize > child.MaximumSize.Height) crossAxisSize = child.MaximumSize.Height;
+                            if (crossAxisSize < child.MinimumSize.Height) crossAxisSize = child.MinimumSize.Height;
+                            boundsSpec |= BoundsSpecified.Height;
+                            break;
+                        case StackChildAxisAlignment.Center:
+                            crossAxisSize = child.Height;
+                            crossAxisPos += (availableHeight - crossAxisSize) / 2;
+                            if (crossAxisPos < displayRect.Top) crossAxisPos = displayRect.Top;
+                            break;
+                        case StackChildAxisAlignment.End:
+                            crossAxisSize = child.Height;
+                            crossAxisPos += availableHeight - crossAxisSize;
+                            if (crossAxisPos < displayRect.Top) crossAxisPos = displayRect.Top;
+                            break;
+                        case StackChildAxisAlignment.Start:
+                        default:
+                            crossAxisSize = child.Height;
+                            break;
+                    }
+                    // Set bounds for flow control
+                    child.SetBounds(currentPos, crossAxisPos, calculatedSizeAlongAxis, crossAxisSize, BoundsSpecified.Location | BoundsSpecified.Width | boundsSpec);
+                    // Store final location (Top-Left corner)
+                    if (!string.IsNullOrEmpty(child.Name)) flowControlLocations[child.Name] = new Point(currentPos, crossAxisPos);
+                    maxCrossAxisSize = Math.Max(maxCrossAxisSize, crossAxisSize); // Update max cross size
+                    currentPos += calculatedSizeAlongAxis; // Advance main axis position
+                }
+                // Add spacing between flow controls
+                if (i < flowControls.Count - 1) currentPos += lay_Spacing;
+            }
+            int contentEndPos = currentPos; // Store final position after last flow control
+            Debug.WriteLine($"Finished positioning Flow Controls. Content End: {contentEndPos}");
+            return contentEndPos;
+        }
+        private void PL_p5__Position_Floating_Controls( List<Control> flowControls, List<Control> floatingControls, 
+            Rectangle displayRect, Dictionary<string, Point> flowControlLocations)
+        {
+            if (floatingControls.Count > 0 && extender != null)
+            {
+                Debug.WriteLine("Positioning Floating Controls...");
+                foreach (Control floater in floatingControls)
+                {
+                    // Get all relevant properties using prefixed names
+                    string targetName = extender.Getlay_FloatTargetName(floater);
+                    int offsetX = extender.Getlay_FloatOffsetX(floater);
+                    int offsetY = extender.Getlay_FloatOffsetY(floater);
+                    FloatAlignment alignment = extender.Getlay_FloatAlignment(floater); // Get alignment
+
+                    int baseX = 0, baseY = 0;
+                    int finalX, finalY; // Declare here
+                    Control targetControl = null;
+
+                    // Try find target control instance directly from flowControls list
+                    if (!string.IsNullOrEmpty(targetName))
+                    {
+                        targetControl = flowControls.FirstOrDefault(fc => fc.Name == targetName);
+                    }
+
+                    // Calculate position based on whether target was found
+                    if (targetControl != null) // Target FOUND and was part of the flow layout
+                    {
+                        Debug.WriteLine($"  Floater '{floater.Name}' -> Target '{targetName}' FOUND.");
+                        // Retrieve the final location we stored earlier
+                        Point targetPos = flowControlLocations[targetName]; // Use stored location
+
+                        // Calculate BASE position based on alignment mode and stored location
+                        switch (alignment)
+                        {
+                            case FloatAlignment.ToLeftOf:
+                                baseX = targetPos.X - floater.Width; // Use stored X
+                                baseY = targetPos.Y; // Use stored Y
+                                Debug.WriteLine($"    Mode: ToLeftOf, Base=({baseX},{baseY})");
+                                break;
+                            case FloatAlignment.ToRightOf:
+                                // Need target's Width for Right edge. Get from targetControl instance.
+                                baseX = targetPos.X + targetControl.Width;
+                                baseY = targetPos.Y; // Use stored Y
+                                Debug.WriteLine($"    Mode: ToRightOf, Base=({baseX},{baseY})");
+                                break;
+                            case FloatAlignment.TopLeft:
+                            default:
+                                baseX = targetPos.X; // Use stored X
+                                baseY = targetPos.Y; // Use stored Y
+                                Debug.WriteLine($"    Mode: TopLeft, Base=({baseX},{baseY})");
+                                break;
+                        }
+                        // Apply offsets
+                        finalX = baseX + offsetX;
+                        finalY = baseY + offsetY;
+                        Debug.WriteLine($"    Offsets=({offsetX},{offsetY}), Final=({finalX},{finalY})");
+                    }
+                    else // Target NOT found (or name was empty) - Use Fallback
+                    {
+                        baseX = displayRect.Left;
+                        baseY = displayRect.Top;
+                        finalX = baseX + offsetX; // Assign in fallback path
+                        finalY = baseY + offsetY; // Assign in fallback path
+                        Debug.WriteLine($"  Floater '{floater.Name}' -> Target '{targetName}' NOT FOUND/Invalid. Fallback Pos: ({finalX},{finalY})");
+                    }
+
+                    // --- Set Bounds (finalX/Y are now guaranteed to be assigned) ---
+                    floater.SetBounds(finalX, finalY, floater.Width, floater.Height, BoundsSpecified.Location);
+
+                    // --- Apply Z-Order: Place Floater BEHIND Target (if target exists) ---
+                    if (targetControl != null)
+                    {
+                        try // Add try-catch for safety when manipulating Controls collection
+                        {
+                            int floaterIndex = this.Controls.GetChildIndex(floater);
+                            int targetIndex = this.Controls.GetChildIndex(targetControl);
+                            // Only move if floater is currently in front of target
+                            if (floaterIndex > targetIndex)
+                            {
+                                this.Controls.SetChildIndex(floater, targetIndex); // Move just behind target
+                                Debug.WriteLine($"    Z-Index set behind Target '{targetControl.Name}'");
+                            }
+                        }
+                        catch (Exception zEx)
+                        {
+                            Debug.WriteLine($"    ERROR setting Z-Index for {floater.Name}: {zEx.Message}");
+                        }
+                    }
+                    else
+                    {
+                        // Fallback Z-order for untargeted floaters (e.g., send to back)
+                        floater.SendToBack();
+                        Debug.WriteLine($"    Z-Index set to Back (untargeted)");
+                    }
+
+                } // End foreach floater
+            } // End if floatingControls
+        }
+        private void PL_p6__Calculate_AutoScrollMinSize_based_on_FLOW_controls(Rectangle displayRect, int maxCrossAxisSize, int contentEndPos)
+        {
+            if (AutoScroll)
+            {
+                if (lay_Orientation == StackOrientation.Vertical)
+                {
+                    int requiredHeight = contentEndPos - displayRect.Top + Padding.Bottom;
+                    int requiredWidth = displayRect.Width;
+                    if (lay_ChildAxisAlignment != StackChildAxisAlignment.Stretch)
+                    {
+                        requiredWidth = maxCrossAxisSize + Padding.Left + Padding.Right;
+                    }
+                    requiredWidth = Math.Max(displayRect.Width, requiredWidth);
+                    this.AutoScrollMinSize = new Size(requiredWidth, requiredHeight);
+                }
+                else
+                {
+                    int requiredWidth = contentEndPos - displayRect.Left + Padding.Right;
+                    int requiredHeight = displayRect.Height;
+                    if (lay_ChildAxisAlignment != StackChildAxisAlignment.Stretch)
+                    {
+                        requiredHeight = maxCrossAxisSize + Padding.Top + Padding.Bottom;
+                    }
+                    requiredHeight = Math.Max(displayRect.Height, requiredHeight);
+                    this.AutoScrollMinSize = new Size(requiredWidth, requiredHeight);
+                }
+                Debug.WriteLine($"Setting AutoScrollMinSize based on Flow Controls to: {this.AutoScrollMinSize}");
+
+            }
+            else
+            {
+                this.AutoScrollMinSize = Size.Empty;
+            }
+        }
+
+
 
         // --- Other Layout Methods (v1, v4) ---
         // IMPORTANT: You would need to apply the same flow/floating separation logic
