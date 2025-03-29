@@ -28,6 +28,8 @@ namespace SharpBrowser.Controls // Your namespace
         TopLeft,
         ToLeftOf,
         ToRightOf,
+        ToTopOf,  
+        ToBottomOf 
         // Potential future additions:
         // Above,
         // Below,
@@ -285,7 +287,6 @@ namespace SharpBrowser.Controls // Your namespace
                 Debug.WriteLine($"StackLayout DEBUG: <--- Finished PerformStackLayout_v{lay_PerformLayout_calcMethod_No}");
             }
         } // End PerformStackLayout_old_v0
-
 
         private void PL_p1__Separate_Visible_Controls_into_Flow_and_Floating(out List<Control> flowControls, out List<Control> floatingControls)
         {
@@ -618,7 +619,7 @@ namespace SharpBrowser.Controls // Your namespace
                 } // End foreach floater
             } // End if floatingControls
         }
-        private void PL_p4__Position_Floating_Controls(List<Control> flowControls, List<Control> floatingControls,
+        private void PL_p4__Position_Floating_Controls__backup2(List<Control> flowControls, List<Control> floatingControls,
                     Rectangle displayRect, Dictionary<string, Point> flowControlLocations)
         {
             // Ensure we have an extender instance to get floating properties
@@ -1140,6 +1141,306 @@ namespace SharpBrowser.Controls // Your namespace
             Debug.WriteLine($"Finished positioning Flow Controls v4. Content End: {contentEndPos}");
         }
 
+
+        private void PL_p4__Position_Floating_Controls(List<Control> flowControls, List<Control> floatingControls,
+                    Rectangle displayRect, Dictionary<string, Point> flowControlLocations)
+        {
+            // Ensure we have an extender instance to get floating properties
+            if (floatingControls.Count > 0 && extender != null)
+            {
+                LayoutLogger.Log("Positioning Floating Controls (v0)..."); // Use LayoutLogger
+                foreach (Control floater in floatingControls)
+                {
+                    // --- Get Extender Properties ---
+                    string targetName = extender.Getlay_FloatTargetName(floater);
+                    int offsetX = extender.Getlay_FloatOffsetX(floater);
+                    int offsetY = extender.Getlay_FloatOffsetY(floater);
+                    FloatAlignment alignment = extender.Getlay_FloatAlignment(floater);
+                    StackFloatZOrder zOrderMode = extender.Getlay_FloatZOrder(floater); // Get the Z-Order mode
+
+                    int baseX = 0, baseY = 0;
+                    int finalX, finalY;
+                    Control targetControl = null;
+
+                    // --- Find Target Control (only among previously laid out flow controls) ---
+                    if (!string.IsNullOrEmpty(targetName))
+                    {
+                        targetControl = flowControls.FirstOrDefault(fc => fc.Name == targetName);
+                        // Removed redundant log message here, handled below
+                    }
+
+                    // --- Calculate Position ---
+                    if (targetControl != null && flowControlLocations.ContainsKey(targetName)) // Target FOUND
+                    {
+                        LayoutLogger.Log($"  Floater '{floater.Name}' -> Target '{targetName}' FOUND."); // Use LayoutLogger
+                        Point targetPos = flowControlLocations[targetName]; // Use the calculated location from flow layout pass
+
+                        // Calculate base position based on alignment
+                        switch (alignment)
+                        {
+                            case FloatAlignment.ToLeftOf:
+                                // Align floater's right edge to target's left edge
+                                baseX = targetPos.X - floater.Width;
+                                baseY = targetPos.Y;
+                                break;
+                            case FloatAlignment.ToRightOf:
+                                // Align floater's left edge to target's right edge
+                                // Requires target's actual width from the control instance
+                                baseX = targetPos.X + targetControl.Width;
+                                baseY = targetPos.Y;
+                                break;
+                            case FloatAlignment.ToTopOf: // <--- NEW CASE
+                                // Align floater's bottom edge to target's top edge
+                                // Requires floater's height
+                                baseX = targetPos.X;
+                                baseY = targetPos.Y - floater.Height;
+                                break;
+                            case FloatAlignment.ToBottomOf: // <--- NEW CASE
+                                // Align floater's top edge to target's bottom edge
+                                // Requires target's actual height from the control instance
+                                baseX = targetPos.X;
+                                baseY = targetPos.Y + targetControl.Height;
+                                break;
+                            case FloatAlignment.TopLeft:
+                            default: // Default to TopLeft
+                                // Align floater's top-left to target's top-left
+                                baseX = targetPos.X;
+                                baseY = targetPos.Y;
+                                break;
+                        }
+                        // Apply offsets after calculating base position
+                        finalX = baseX + offsetX;
+                        finalY = baseY + offsetY;
+                        LayoutLogger.Log($"    Mode: {alignment}, Base=({baseX},{baseY}), Offsets=({offsetX},{offsetY}), Final=({finalX},{finalY})"); // Use LayoutLogger
+                    }
+                    else // Target NOT found or not specified - Use Fallback (relative to displayRect)
+                    {
+                        baseX = displayRect.Left;
+                        baseY = displayRect.Top;
+                        finalX = baseX + offsetX;
+                        finalY = baseY + offsetY;
+                        if (!string.IsNullOrEmpty(targetName))
+                            LayoutLogger.Log($"  Floater '{floater.Name}' -> Target '{targetName}' NOT FOUND/Invalid among flow controls. Fallback Pos: ({finalX},{finalY})"); // Use LayoutLogger
+                        else
+                            LayoutLogger.Log($"  Floater '{floater.Name}' -> No Target Name. Fallback Pos: ({finalX},{finalY})"); // Use LayoutLogger
+                        targetControl = null; // Explicitly nullify if not found
+                    }
+
+                    // --- Set Bounds ---
+                    floater.SetBounds(finalX, finalY, floater.Width, floater.Height, BoundsSpecified.Location);
+
+                    // --- Apply Z-Order based on Mode ---
+                    LayoutLogger.Log($"  Z-Order Prep: Floater='{floater.Name}', Target='{targetControl?.Name ?? "null"}', Mode={zOrderMode}"); // Use LayoutLogger
+                    try // Wrap Z-order manipulation in a try-catch for safety
+                    {
+                        int initialFloaterIndex = -1;
+                        int initialTargetIndex = -1;
+                        try { initialFloaterIndex = this.Controls.GetChildIndex(floater); } catch { /* ignore */ }
+                        if (targetControl != null) { try { initialTargetIndex = this.Controls.GetChildIndex(targetControl); } catch { /* ignore */ } }
+                        LayoutLogger.Log($"    Indices BEFORE: Floater={initialFloaterIndex}, Target={initialTargetIndex}"); // Use LayoutLogger
+
+                        switch (zOrderMode)
+                        {
+                            case StackFloatZOrder.InFrontOfTarget:
+                                LayoutLogger.Log($"    Action: InFrontOfTarget");
+                                if (targetControl != null)
+                                {
+                                    int targetIndex = this.Controls.GetChildIndex(targetControl);
+                                    int desiredIndex = targetIndex + 1;
+                                    string logAction = (desiredIndex >= this.Controls.Count ? "BringToFront()" : $"SetChildIndex({desiredIndex})");
+                                    LayoutLogger.Log($"      Attempting: {logAction}");
+
+                                    if (desiredIndex >= this.Controls.Count)
+                                    {
+                                        if (this.Controls.GetChildIndex(floater) != this.Controls.Count - 1) floater.BringToFront();
+                                    }
+                                    else if (this.Controls.GetChildIndex(floater) != desiredIndex)
+                                    {
+                                        this.Controls.SetChildIndex(floater, desiredIndex);
+                                    }
+                                }
+                                else
+                                {
+                                    LayoutLogger.Log($"      Attempting: BringToFront() (no target)");
+                                    if (this.Controls.GetChildIndex(floater) != this.Controls.Count - 1) floater.BringToFront();
+                                }
+                                break;
+
+                            case StackFloatZOrder.BehindTarget:
+                                LayoutLogger.Log($"    Action: BehindTarget");
+                                if (targetControl != null)
+                                {
+                                    int targetIndex = this.Controls.GetChildIndex(targetControl);
+                                    LayoutLogger.Log($"      Attempting: SetChildIndex({targetIndex})");
+                                    if (this.Controls.GetChildIndex(floater) != targetIndex)
+                                    {
+                                        this.Controls.SetChildIndex(floater, targetIndex);
+                                    }
+                                }
+                                else
+                                {
+                                    LayoutLogger.Log($"      Attempting: SendToBack() (no target)");
+                                    if (this.Controls.GetChildIndex(floater) != 0) floater.SendToBack();
+                                }
+                                break;
+
+                            case StackFloatZOrder.Manual:
+                            default:
+                                LayoutLogger.Log($"    Action: Manual (No change)");
+                                break;
+                        }
+                        // Log AFTER
+                        int finalFloaterIndex = -1; int finalTargetIndex = -1;
+                        try { finalFloaterIndex = this.Controls.GetChildIndex(floater); } catch { /* ignore */ }
+                        if (targetControl != null) { try { finalTargetIndex = this.Controls.GetChildIndex(targetControl); } catch { /* ignore */ } }
+                        LayoutLogger.Log($"    Indices AFTER: Floater={finalFloaterIndex}, Target={finalTargetIndex}");
+
+                    }
+                    catch (Exception zEx)
+                    {
+                        LayoutLogger.Log($"    ERROR setting Z-Index for {floater.Name} (Mode: {zOrderMode}): {zEx.Message}. Z-order might be incorrect.");
+                    }
+                    // --- END Z-Order Section ---
+
+                } // End foreach floater
+                LayoutLogger.Log("...Finished Positioning Floating Controls (v0)"); // Use LayoutLogger
+            }
+            else if (floatingControls.Count > 0 && extender == null)
+            {
+                LayoutLogger.Log("WARNING: Floating controls exist but LayoutExtenderProvider is not assigned. Cannot position floaters or manage Z-order."); // Use LayoutLogger
+            }
+        }
+
+        private void PL4_p4_Position_Floating_Controls(List<Control> flowControls, List<Control> floatingControls,
+            Rectangle displayRect, Dictionary<string, Point> flowControlLocations)
+        {
+            if (floatingControls.Count > 0 && extender != null)
+            {
+                LayoutLogger.Log("Positioning Floating Controls (v4)..."); // Use LayoutLogger
+                foreach (Control floater in floatingControls)
+                {
+                    // ... (Get properties: targetName, offsetX, offsetY, alignment, zOrderMode) ...
+                    string targetName = extender.Getlay_FloatTargetName(floater);
+                    int offsetX = extender.Getlay_FloatOffsetX(floater);
+                    int offsetY = extender.Getlay_FloatOffsetY(floater);
+                    FloatAlignment alignment = extender.Getlay_FloatAlignment(floater);
+                    StackFloatZOrder zOrderMode = extender.Getlay_FloatZOrder(floater);
+
+                    int baseX = 0, baseY = 0;
+                    int finalX, finalY;
+                    Control targetControl = null;
+
+                    // ... (Find Target Control) ...
+                    if (!string.IsNullOrEmpty(targetName))
+                    {
+                        targetControl = flowControls.FirstOrDefault(fc => fc.Name == targetName);
+                    }
+
+                    // --- Calculate Position (MODIFY THIS SWITCH) ---
+                    if (targetControl != null && flowControlLocations.ContainsKey(targetName)) // Target FOUND
+                    {
+                        LayoutLogger.Log($"  Floater '{floater.Name}' -> Target '{targetName}' FOUND."); // Use LayoutLogger
+                        Point targetPos = flowControlLocations[targetName];
+
+                        // --- START OF SWITCH TO MODIFY ---
+                        switch (alignment)
+                        {
+                            case FloatAlignment.ToLeftOf:
+                                baseX = targetPos.X - floater.Width;
+                                baseY = targetPos.Y;
+                                break;
+                            case FloatAlignment.ToRightOf:
+                                baseX = targetPos.X + targetControl.Width;
+                                baseY = targetPos.Y;
+                                break;
+                            case FloatAlignment.ToTopOf: // <--- ADDED CASE
+                                baseX = targetPos.X;
+                                baseY = targetPos.Y - floater.Height;
+                                break;
+                            case FloatAlignment.ToBottomOf: // <--- ADDED CASE
+                                baseX = targetPos.X;
+                                baseY = targetPos.Y + targetControl.Height;
+                                break;
+                            case FloatAlignment.TopLeft:
+                            default:
+                                baseX = targetPos.X;
+                                baseY = targetPos.Y;
+                                break;
+                        }
+                        // --- END OF SWITCH TO MODIFY ---
+
+                        finalX = baseX + offsetX;
+                        finalY = baseY + offsetY;
+                        LayoutLogger.Log($"    Mode: {alignment}, Base=({baseX},{baseY}), Offsets=({offsetX},{offsetY}), Final=({finalX},{finalY})"); // Use LayoutLogger
+                    }
+                    else // Target NOT found or not specified
+                    {
+                        baseX = displayRect.Left; baseY = displayRect.Top;
+                        finalX = baseX + offsetX; finalY = baseY + offsetY;
+                        if (!string.IsNullOrEmpty(targetName))
+                            LayoutLogger.Log($"  Floater '{floater.Name}' -> Target '{targetName}' NOT FOUND/Invalid among flow controls. Fallback Pos: ({finalX},{finalY})"); // Use LayoutLogger
+                        else
+                            LayoutLogger.Log($"  Floater '{floater.Name}' -> No Target Name. Fallback Pos: ({finalX},{finalY})"); // Use LayoutLogger
+                        targetControl = null;
+                    }
+
+                    // ... (Set Bounds) ...
+                    floater.SetBounds(finalX, finalY, floater.Width, floater.Height, BoundsSpecified.Location);
+
+                    // ... (Apply Z-Order - Use the EXACT SAME logic/logging as in PL_p4) ...
+                    LayoutLogger.Log($"  Z-Order Prep: Floater='{floater.Name}', Target='{targetControl?.Name ?? "null"}', Mode={zOrderMode}"); // Use LayoutLogger
+                    try
+                    {
+                        // ---- PASTE THE ENTIRE Z-ORDER TRY-CATCH BLOCK FROM PL_p4 HERE ----
+                        int initialFloaterIndex = -1; int initialTargetIndex = -1;
+                        try { initialFloaterIndex = this.Controls.GetChildIndex(floater); } catch { /* ignore */ }
+                        if (targetControl != null) { try { initialTargetIndex = this.Controls.GetChildIndex(targetControl); } catch { /* ignore */ } }
+                        LayoutLogger.Log($"    Indices BEFORE: Floater={initialFloaterIndex}, Target={initialTargetIndex}");
+
+                        switch (zOrderMode)
+                        {
+                            case StackFloatZOrder.InFrontOfTarget:
+                                LayoutLogger.Log($"    Action: InFrontOfTarget");
+                                if (targetControl != null)
+                                {
+                                    int targetIndex = this.Controls.GetChildIndex(targetControl); int desiredIndex = targetIndex + 1;
+                                    string logAction = (desiredIndex >= this.Controls.Count ? "BringToFront()" : $"SetChildIndex({desiredIndex})");
+                                    LayoutLogger.Log($"      Attempting: {logAction}");
+                                    if (desiredIndex >= this.Controls.Count) { if (this.Controls.GetChildIndex(floater) != this.Controls.Count - 1) floater.BringToFront(); }
+                                    else if (this.Controls.GetChildIndex(floater) != desiredIndex) { this.Controls.SetChildIndex(floater, desiredIndex); }
+                                }
+                                else { LayoutLogger.Log($"      Attempting: BringToFront() (no target)"); if (this.Controls.GetChildIndex(floater) != this.Controls.Count - 1) floater.BringToFront(); }
+                                break;
+                            case StackFloatZOrder.BehindTarget:
+                                LayoutLogger.Log($"    Action: BehindTarget");
+                                if (targetControl != null)
+                                {
+                                    int targetIndex = this.Controls.GetChildIndex(targetControl); LayoutLogger.Log($"      Attempting: SetChildIndex({targetIndex})");
+                                    if (this.Controls.GetChildIndex(floater) != targetIndex) { this.Controls.SetChildIndex(floater, targetIndex); }
+                                }
+                                else { LayoutLogger.Log($"      Attempting: SendToBack() (no target)"); if (this.Controls.GetChildIndex(floater) != 0) floater.SendToBack(); }
+                                break;
+                            case StackFloatZOrder.Manual: default: LayoutLogger.Log($"    Action: Manual (No change)"); break;
+                        }
+                        int finalFloaterIndex = -1; int finalTargetIndex = -1;
+                        try { finalFloaterIndex = this.Controls.GetChildIndex(floater); } catch { /* ignore */ }
+                        if (targetControl != null) { try { finalTargetIndex = this.Controls.GetChildIndex(targetControl); } catch { /* ignore */ } }
+                        LayoutLogger.Log($"    Indices AFTER: Floater={finalFloaterIndex}, Target={finalTargetIndex}");
+                    }
+                    catch (Exception zEx) { LayoutLogger.Log($"    ERROR setting Z-Index for {floater.Name} (Mode: {zOrderMode}): {zEx.Message}. Z-order might be incorrect."); }
+                    // --- END Z-Order Section ---
+
+                } // End foreach
+                LayoutLogger.Log("...Finished Positioning Floating Controls (v4)"); // Use LayoutLogger
+            }
+            else if (floatingControls.Count > 0 && extender == null)
+            {
+                LayoutLogger.Log("WARNING: Floating controls exist but LayoutExtenderProvider is not assigned. Cannot position floaters or manage Z-order."); // Use LayoutLogger
+            }
+        }
+
+
+
         /// <summary>
         /// identical_ to v0
         /// </summary>
@@ -1233,7 +1534,7 @@ namespace SharpBrowser.Controls // Your namespace
         /// <summary>
         /// identical to 0 --  added Zorder  
         /// </summary>
-        private void PL4_p4_Position_Floating_Controls(List<Control> flowControls, List<Control> floatingControls,
+        private void PL4_p4_Position_Floating_Controls_backup2(List<Control> flowControls, List<Control> floatingControls,
             Rectangle displayRect, Dictionary<string, Point> flowControlLocations)
         {
             // Ensure we have an extender instance to get floating properties
