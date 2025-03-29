@@ -246,14 +246,14 @@ namespace SharpBrowser.Controls // Your namespace
             {
                 // --- 1. Separate Visible Controls into Flow and Floating ---
                 List<Control> flowControls, floatingControls;
-                PL_p1__Separate_Visible_Controls_into_Flow_and_Floating( out flowControls, out floatingControls);
+                PL_p1__Separate_Visible_Controls_into_Flow_and_Floating(out flowControls, out floatingControls);
 
                 Rectangle displayRect = this.DisplayRectangle;
 
                 // --- 2. Handle Case of No Flow Controls ---
                 if (flowControls.Count == 0)
                 {
-                    PL_p2__Handle_Case_of_No_Flow_Controls( floatingControls, displayRect);
+                    PL_p2__Handle_Case_of_No_Flow_Controls(floatingControls, displayRect);
                     return;
                 }
 
@@ -261,13 +261,13 @@ namespace SharpBrowser.Controls // Your namespace
                 Dictionary<Control, int> weights, extraSpaceMap;
                 int currentPos, maxCrossAxisSize;
                 Dictionary<string, Point> flowControlLocations;
-                PL_p3__Layout_Flow_Controls( flowControls, displayRect, out weights, out extraSpaceMap, out currentPos, out maxCrossAxisSize, out flowControlLocations);
+                PL_p3__Layout_Flow_Controls(flowControls, displayRect, out weights, out extraSpaceMap, out currentPos, out maxCrossAxisSize, out flowControlLocations);
 
                 // --- Position FLOW Controls Loop ---
                 int contentEndPos = PL_p32__Position_FLOW_Controls_Loop(flowControls, displayRect, weights, extraSpaceMap, ref currentPos, ref maxCrossAxisSize, flowControlLocations);
 
                 // --- 4. Position Floating Controls ---
-                PL_p4__Position_Floating_Controls( flowControls, floatingControls, displayRect, flowControlLocations);
+                PL_p4__Position_Floating_Controls(flowControls, floatingControls, displayRect, flowControlLocations);
 
                 // --- 5. Calculate AutoScrollMinSize based on FLOW controls ---
                 PL_p5__Calculate_AutoScrollMinSize_based_on_FLOW_controls(displayRect, maxCrossAxisSize, contentEndPos);
@@ -287,7 +287,7 @@ namespace SharpBrowser.Controls // Your namespace
         } // End PerformStackLayout_old_v0
 
 
-        private void PL_p1__Separate_Visible_Controls_into_Flow_and_Floating( out List<Control> flowControls, out List<Control> floatingControls)
+        private void PL_p1__Separate_Visible_Controls_into_Flow_and_Floating(out List<Control> flowControls, out List<Control> floatingControls)
         {
             var allVisibleControls = this.Controls.OfType<Control>().Where(c => c.Visible).ToList();
             flowControls = new List<Control>();
@@ -343,7 +343,7 @@ namespace SharpBrowser.Controls // Your namespace
             _isPerformingLayout = false; // Reset flag before returning
             Debug.WriteLine($"StackLayout DEBUG: <--- Finished PerformStackLayout (No Flow Controls)");
         }
-        private void PL_p3__Layout_Flow_Controls(List<Control> flowControls, Rectangle displayRect, out Dictionary<Control, int> weights, 
+        private void PL_p3__Layout_Flow_Controls(List<Control> flowControls, Rectangle displayRect, out Dictionary<Control, int> weights,
             out Dictionary<Control, int> extraSpaceMap, out int currentPos, out int maxCrossAxisSize, out Dictionary<string, Point> flowControlLocations)
         {
             this.SuspendLayout();
@@ -418,7 +418,7 @@ namespace SharpBrowser.Controls // Your namespace
             // Dictionary to store final LOCATION (Point) keyed by control NAME for flow controls.
             flowControlLocations = new Dictionary<string, Point>();
         }
-        private int PL_p32__Position_FLOW_Controls_Loop(List<Control> flowControls, Rectangle displayRect, Dictionary<Control, int> weights, 
+        private int PL_p32__Position_FLOW_Controls_Loop(List<Control> flowControls, Rectangle displayRect, Dictionary<Control, int> weights,
             Dictionary<Control, int> extraSpaceMap, ref int currentPos, ref int maxCrossAxisSize, Dictionary<string, Point> flowControlLocations)
         {
             for (int i = 0; i < flowControls.Count; i++)
@@ -520,7 +520,7 @@ namespace SharpBrowser.Controls // Your namespace
             Debug.WriteLine($"Finished positioning Flow Controls. Content End: {contentEndPos}");
             return contentEndPos;
         }
-        private void PL_p4__Position_Floating_Controls__backup( List<Control> flowControls, List<Control> floatingControls, 
+        private void PL_p4__Position_Floating_Controls__backup(List<Control> flowControls, List<Control> floatingControls,
             Rectangle displayRect, Dictionary<string, Point> flowControlLocations)
         {
             if (floatingControls.Count > 0 && extender != null)
@@ -618,7 +618,6 @@ namespace SharpBrowser.Controls // Your namespace
                 } // End foreach floater
             } // End if floatingControls
         }
-
         private void PL_p4__Position_Floating_Controls(List<Control> flowControls, List<Control> floatingControls,
                     Rectangle displayRect, Dictionary<string, Point> flowControlLocations)
         {
@@ -798,8 +797,6 @@ namespace SharpBrowser.Controls // Your namespace
                 Debug.WriteLine("WARNING: Floating controls exist but LayoutExtenderProvider is not assigned. Cannot position floaters or manage Z-order.");
             }
         }
-        
-
         private void PL_p5__Calculate_AutoScrollMinSize_based_on_FLOW_controls(Rectangle displayRect, int maxCrossAxisSize, int contentEndPos)
         {
             if (AutoScroll)
@@ -836,12 +833,9 @@ namespace SharpBrowser.Controls // Your namespace
         }
 
 
-
-
-
-        // --- Other Layout Methods (v1, v4) ---
+        // --- Other Layout Methods ( v4) ---
         // IMPORTANT: You would need to apply the same flow/floating separation logic
-        // to PerformStackLayout_v1 and PerformStackLayout_v4 if you intend to use
+        // to   PerformStackLayout_v4 if you intend to use
         // those methods with floating controls. The logic will be very similar:
         // 1. Separate controls using extender.Getlay_IsFloating()
         // 2. Perform main calculations/loops ONLY on flowControls
@@ -883,7 +877,7 @@ namespace SharpBrowser.Controls // Your namespace
 
                 // --- 3. Layout Flow Controls (Method 4 Logic) ---
                 this.SuspendLayout();
-                
+
                 Dictionary<Control, int> weights, calculatedExpanderSizes;
                 PL4_p3_Layout_Flow_Controls__Method4_Logic(flowControls, displayRect, out weights, out calculatedExpanderSizes);
 
@@ -893,10 +887,10 @@ namespace SharpBrowser.Controls // Your namespace
                 PL4_p32_Position_FLOW_Controls_Sequentially(flowControls, displayRect, weights, calculatedExpanderSizes, out maxCrossAxisSize, out flowControlLocations, out contentEndPos);
 
                 // --- 4. Position Floating Controls (Identical logic to v0) ---
-                PL4_p4_Position_Floating_Controls__Identical_logic_to_v0(flowControls, floatingControls, displayRect, flowControlLocations);
+                PL4_p4_Position_Floating_Controls(flowControls, floatingControls, displayRect, flowControlLocations);
 
                 // --- 5. Calculate AutoScrollMinSize based on FLOW controls (Identical logic to v0) ---
-                PL4_p5_Calculate_AutoScrollMinSize_based_on_FLOW_controls__Identical_logic_to_v0(displayRect, maxCrossAxisSize, contentEndPos);
+                PL4_p5_Calculate_AutoScrollMinSize_based_on_FLOW_controls(displayRect, maxCrossAxisSize, contentEndPos);
 
                 // --- Resume Layout ---
                 this.ResumeLayout(true);
@@ -938,7 +932,6 @@ namespace SharpBrowser.Controls // Your namespace
             } // No extender, all are flow
             Debug.WriteLine($"Layout Pass v4: Flow Controls ({flowControls.Count}), Floating Controls ({floatingControls.Count})");
         }
-
         private void PL4_p2_Handle_Case_of_No_Flow_Controls(List<Control> floatingControls, Rectangle displayRect)
         {
             Debug.WriteLine("No flow controls to layout.");
@@ -966,8 +959,6 @@ namespace SharpBrowser.Controls // Your namespace
             }
             Debug.WriteLine($"StackLayout DEBUG: <--- Finished PerformStackLayout (No Flow Controls)");
         }
-
-
         private void PL4_p3_Layout_Flow_Controls__Method4_Logic(List<Control> flowControls, Rectangle displayRect, out Dictionary<Control, int> weights, out Dictionary<Control, int> calculatedExpanderSizes)
         {
             // --- Calculate sizes/weights based ONLY on flowControls ---
@@ -1041,7 +1032,6 @@ namespace SharpBrowser.Controls // Your namespace
                 foreach (Control child in expandingControls) calculatedExpanderSizes[child] = 0;
             }
         }
-
         private void PL4_p32_Position_FLOW_Controls_Sequentially(List<Control> flowControls, Rectangle displayRect,
             Dictionary<Control, int> weights, Dictionary<Control, int> calculatedExpanderSizes, out int maxCrossAxisSize, out Dictionary<string, Point> flowControlLocations, out int contentEndPos)
         {
@@ -1150,7 +1140,10 @@ namespace SharpBrowser.Controls // Your namespace
             Debug.WriteLine($"Finished positioning Flow Controls v4. Content End: {contentEndPos}");
         }
 
-        private void PL4_p4_Position_Floating_Controls__Identical_logic_to_v0__backup(List<Control> flowControls, List<Control> floatingControls, 
+        /// <summary>
+        /// identical_ to v0
+        /// </summary>
+        private void PL4_p4_Position_Floating_Controls__backup(List<Control> flowControls, List<Control> floatingControls,
             Rectangle displayRect, Dictionary<string, Point> flowControlLocations)
         {
             if (floatingControls.Count > 0 && extender != null)
@@ -1238,9 +1231,9 @@ namespace SharpBrowser.Controls // Your namespace
         }
 
         /// <summary>
-        /// added Zorder
+        /// identical to 0 --  added Zorder  
         /// </summary>
-        private void PL4_p4_Position_Floating_Controls__Identical_logic_to_v0(List<Control> flowControls, List<Control> floatingControls,
+        private void PL4_p4_Position_Floating_Controls(List<Control> flowControls, List<Control> floatingControls,
             Rectangle displayRect, Dictionary<string, Point> flowControlLocations)
         {
             // Ensure we have an extender instance to get floating properties
@@ -1420,7 +1413,10 @@ namespace SharpBrowser.Controls // Your namespace
             }
         }
 
-        private void PL4_p5_Calculate_AutoScrollMinSize_based_on_FLOW_controls__Identical_logic_to_v0(Rectangle displayRect, int maxCrossAxisSize,
+        /// <summary>
+        /// identical to v0
+        /// </summary>
+        private void PL4_p5_Calculate_AutoScrollMinSize_based_on_FLOW_controls(Rectangle displayRect, int maxCrossAxisSize,
             int contentEndPos)
         {
             if (AutoScroll)
