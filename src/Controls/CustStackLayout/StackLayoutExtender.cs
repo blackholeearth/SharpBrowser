@@ -14,6 +14,7 @@ namespace SharpBrowser.Controls // Your namespace
     [ProvideProperty("lay_FloatOffsetX", typeof(Control))]
     [ProvideProperty("lay_FloatOffsetY", typeof(Control))]
     [ProvideProperty("lay_FloatAlignment", typeof(Control))] 
+    [ProvideProperty("lay_FloatZOrder", typeof(Control))] 
     public class StackLayoutExtender : Component, IExtenderProvider
     {
         // --- Backing Hashtables ---
@@ -23,6 +24,7 @@ namespace SharpBrowser.Controls // Your namespace
         private Hashtable _lay_floatOffsetsX = new Hashtable();
         private Hashtable _lay_floatOffsetsY = new Hashtable();
         private Hashtable _lay_floatAlignments = new Hashtable();
+        private Hashtable _lay_floatZOrderModes = new Hashtable();
 
         #region IExtenderProvider Members
 
@@ -35,6 +37,31 @@ namespace SharpBrowser.Controls // Your namespace
         #endregion
 
         // --- Provided Properties ---
+
+        #region lay_FloatZOrder Property (Provided)
+        [DefaultValue(StackFloatZOrder.InFrontOfTarget)] // Default enum value
+        [Category(StackLayout.categorySTR)] // Use the category defined in StackLayout
+        [Description("Defines how this floating control's Z-order is managed relative to its target during layout. AboveTarget (Default), BelowTarget, or Manual (respects designer settings).")]
+        public StackFloatZOrder Getlay_FloatZOrder(Control control) // Getter name MUST match ProvideProperty
+        {
+            // Return the stored value or the default if not set
+            return _lay_floatZOrderModes.Contains(control) ? (StackFloatZOrder)_lay_floatZOrderModes[control] : StackFloatZOrder.InFrontOfTarget;
+        }
+        public void Setlay_FloatZOrder(Control control, StackFloatZOrder zOrderMode) // Setter name MUST match ProvideProperty
+        {
+            // Store the selected enum value
+            if (Getlay_FloatZOrder(control) == zOrderMode) return; // No change
+            _lay_floatZOrderModes[control] = zOrderMode;
+
+            // IMPORTANT: Do NOT trigger PerformLayout here.
+            // Changing the Z-order *mode* only affects how the *next* layout is performed.
+            // It doesn't require an immediate re-layout itself and calling it here
+            // could interfere with designer actions or cause unnecessary churn.
+            // Z-order changes will be applied during the next natural layout cycle
+            // triggered by other events (resize, visibility change, etc.)
+        }
+        #endregion
+
 
         #region lay_FloatAlignment Property (Provided)
         [DefaultValue(FloatAlignment.TopLeft)] // Set default
@@ -175,15 +202,19 @@ namespace SharpBrowser.Controls // Your namespace
         {
             if (disposing)
             {
-                if (components != null) components.Dispose();
-                // Clear all Hashtables
-                _expandWeights?.Clear(); // Or _lay_expandWeights
+                if (components != null){
+                    components.Dispose();
+                }
+                // Clear all Hashtables to release control references
+                _expandWeights?.Clear();
                 _lay_isFloatingFlags?.Clear();
                 _lay_floatTargetNames?.Clear();
                 _lay_floatOffsetsX?.Clear();
                 _lay_floatOffsetsY?.Clear();
                 _lay_floatAlignments?.Clear();
+                _lay_floatZOrderModes?.Clear();  
             }
+            // No unmanaged resources to free, but call base class
             base.Dispose(disposing);
         }
         private void InitializeComponent() { components = new System.ComponentModel.Container(); }
