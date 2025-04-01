@@ -27,6 +27,7 @@ namespace SharpBrowser.Controls
             var size = tbx.Size;
             var anchor = tbx.Anchor;
             var dock = tbx.Dock;
+            var child_index = tbxOriginalParent.Controls.GetChildIndex(tbx);
 
             
             //restore them to Panel
@@ -37,9 +38,10 @@ namespace SharpBrowser.Controls
             panel.Anchor = anchor;
             panel.Dock = dock;
             tbxOriginalParent.Controls.Add(panel);
+            tbxOriginalParent.Controls.SetChildIndex(panel, child_index);
 
 
-            panel.BackColor = Color.Transparent;
+            panel.BackColor = Color.Transparent; 
             ////debug
             //panel.BackColor = Color.OrangeRed;
 

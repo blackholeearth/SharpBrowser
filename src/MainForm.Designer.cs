@@ -42,7 +42,6 @@ namespace SharpBrowser
             timer1 = new Timer(components);
             BtnDownloads = new FontAwesome.Sharp.IconButton();
             TxtURL = new TextBox();
-            PanelToolbar = new Panel();
             lbl_ZoomLevel = new Label();
             BtnMenu = new FontAwesome.Sharp.IconButton();
             BtnHome = new FontAwesome.Sharp.IconButton();
@@ -54,11 +53,12 @@ namespace SharpBrowser
             BtnPrevSearch = new Button();
             BtnCloseSearch = new Button();
             TxtSearch = new TextBox();
+            PanelToolbar = new SharpBrowser.Controls.StackLayout();
             menuStripTab.SuspendLayout();
-            PanelToolbar.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)TabPages).BeginInit();
             TabPages.SuspendLayout();
             PanelSearch.SuspendLayout();
+            PanelToolbar.SuspendLayout();
             SuspendLayout();
             // 
             // menuStripTab
@@ -93,10 +93,10 @@ namespace SharpBrowser
             BtnRefresh.IconColor = System.Drawing.Color.Black;
             BtnRefresh.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnRefresh.IconSize = 30;
-            BtnRefresh.Location = new System.Drawing.Point(85, 5);
+            BtnRefresh.Location = new System.Drawing.Point(78, 17);
             BtnRefresh.Margin = new Padding(3, 4, 3, 4);
             BtnRefresh.Name = "BtnRefresh";
-            BtnRefresh.Size = new System.Drawing.Size(36, 34);
+            BtnRefresh.Size = new System.Drawing.Size(36, 30);
             BtnRefresh.TabIndex = 3;
             BtnRefresh.UseVisualStyleBackColor = true;
             BtnRefresh.Click += bRefresh_Click;
@@ -110,10 +110,13 @@ namespace SharpBrowser
             BtnStop.IconColor = System.Drawing.Color.Black;
             BtnStop.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnStop.IconSize = 30;
-            BtnStop.Location = new System.Drawing.Point(85, 5);
+            PanelToolbar.Setlay_FloatTargetName(BtnStop, "BtnRefresh");
+            PanelToolbar.Setlay_FloatZOrder(BtnStop, SharpBrowser.Controls.StackFloatZOrder.Manual);
+            PanelToolbar.Setlay_IsFloating(BtnStop, true);
+            BtnStop.Location = new System.Drawing.Point(78, 17);
             BtnStop.Margin = new Padding(3, 4, 3, 4);
             BtnStop.Name = "BtnStop";
-            BtnStop.Size = new System.Drawing.Size(36, 34);
+            BtnStop.Size = new System.Drawing.Size(36, 30);
             BtnStop.TabIndex = 2;
             BtnStop.UseVisualStyleBackColor = true;
             BtnStop.Click += bStop_Click;
@@ -128,10 +131,10 @@ namespace SharpBrowser
             BtnForward.IconColor = System.Drawing.Color.Black;
             BtnForward.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnForward.IconSize = 30;
-            BtnForward.Location = new System.Drawing.Point(45, 5);
+            BtnForward.Location = new System.Drawing.Point(39, 17);
             BtnForward.Margin = new Padding(3, 4, 3, 4);
             BtnForward.Name = "BtnForward";
-            BtnForward.Size = new System.Drawing.Size(36, 34);
+            BtnForward.Size = new System.Drawing.Size(36, 30);
             BtnForward.TabIndex = 1;
             BtnForward.UseVisualStyleBackColor = true;
             BtnForward.Click += bForward_Click;
@@ -146,10 +149,10 @@ namespace SharpBrowser
             BtnBack.IconColor = System.Drawing.Color.Black;
             BtnBack.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnBack.IconSize = 30;
-            BtnBack.Location = new System.Drawing.Point(5, 5);
+            BtnBack.Location = new System.Drawing.Point(0, 17);
             BtnBack.Margin = new Padding(3, 4, 3, 4);
             BtnBack.Name = "BtnBack";
-            BtnBack.Size = new System.Drawing.Size(36, 34);
+            BtnBack.Size = new System.Drawing.Size(36, 30);
             BtnBack.TabIndex = 0;
             BtnBack.UseVisualStyleBackColor = true;
             BtnBack.Click += bBack_Click;
@@ -170,10 +173,10 @@ namespace SharpBrowser
             BtnDownloads.IconColor = System.Drawing.Color.Black;
             BtnDownloads.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnDownloads.IconSize = 30;
-            BtnDownloads.Location = new System.Drawing.Point(794, 5);
+            BtnDownloads.Location = new System.Drawing.Point(802, 17);
             BtnDownloads.Margin = new Padding(3, 4, 3, 4);
             BtnDownloads.Name = "BtnDownloads";
-            BtnDownloads.Size = new System.Drawing.Size(36, 34);
+            BtnDownloads.Size = new System.Drawing.Size(36, 30);
             BtnDownloads.TabIndex = 4;
             BtnDownloads.Tag = "Downloads";
             BtnDownloads.UseVisualStyleBackColor = true;
@@ -183,40 +186,27 @@ namespace SharpBrowser
             // 
             TxtURL.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             TxtURL.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, 0);
-            TxtURL.Location = new System.Drawing.Point(132, 4);
+            PanelToolbar.Setlay_ExpandWeight(TxtURL, 1);
+            TxtURL.Location = new System.Drawing.Point(117, 15);
             TxtURL.Margin = new Padding(3, 4, 3, 4);
             TxtURL.Name = "TxtURL";
-            TxtURL.Size = new System.Drawing.Size(654, 34);
+            TxtURL.Size = new System.Drawing.Size(682, 34);
             TxtURL.TabIndex = 5;
             TxtURL.Click += TxtURL_Click;
             TxtURL.Enter += TxtURL_Enter;
             TxtURL.KeyDown += TxtURL_KeyDown;
-            // 
-            // PanelToolbar
-            // 
-            PanelToolbar.BackColor = System.Drawing.Color.FromArgb(247, 247, 247);
-            PanelToolbar.Controls.Add(lbl_ZoomLevel);
-            PanelToolbar.Controls.Add(BtnMenu);
-            PanelToolbar.Controls.Add(BtnHome);
-            PanelToolbar.Controls.Add(BtnDownloads);
-            PanelToolbar.Controls.Add(BtnForward);
-            PanelToolbar.Controls.Add(BtnBack);
-            PanelToolbar.Controls.Add(TxtURL);
-            PanelToolbar.Controls.Add(BtnRefresh);
-            PanelToolbar.Controls.Add(BtnStop);
-            PanelToolbar.Dock = DockStyle.Top;
-            PanelToolbar.Location = new System.Drawing.Point(0, 0);
-            PanelToolbar.Margin = new Padding(3, 4, 3, 4);
-            PanelToolbar.Name = "PanelToolbar";
-            PanelToolbar.Size = new System.Drawing.Size(916, 45);
-            PanelToolbar.TabIndex = 6;
             // 
             // lbl_ZoomLevel
             // 
             lbl_ZoomLevel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             lbl_ZoomLevel.AutoSize = true;
             lbl_ZoomLevel.FlatStyle = FlatStyle.Flat;
-            lbl_ZoomLevel.Location = new System.Drawing.Point(748, 16);
+            PanelToolbar.Setlay_FloatAlignment(lbl_ZoomLevel, SharpBrowser.Controls.FloatAlignment.ToRightOf);
+            PanelToolbar.Setlay_FloatOffsetX(lbl_ZoomLevel, -65);
+            PanelToolbar.Setlay_FloatOffsetY(lbl_ZoomLevel, 7);
+            PanelToolbar.Setlay_FloatTargetName(lbl_ZoomLevel, "TxtURL");
+            PanelToolbar.Setlay_IsFloating(lbl_ZoomLevel, true);
+            lbl_ZoomLevel.Location = new System.Drawing.Point(734, 22);
             lbl_ZoomLevel.Name = "lbl_ZoomLevel";
             lbl_ZoomLevel.Size = new System.Drawing.Size(42, 20);
             lbl_ZoomLevel.TabIndex = 9;
@@ -238,13 +228,12 @@ namespace SharpBrowser
             BtnMenu.IconColor = System.Drawing.Color.Black;
             BtnMenu.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnMenu.IconSize = 30;
-            BtnMenu.Location = new System.Drawing.Point(874, 5);
+            BtnMenu.Location = new System.Drawing.Point(880, 17);
             BtnMenu.Margin = new Padding(3, 4, 3, 4);
             BtnMenu.Name = "BtnMenu";
-            BtnMenu.Size = new System.Drawing.Size(36, 34);
+            BtnMenu.Size = new System.Drawing.Size(36, 30);
             BtnMenu.TabIndex = 7;
             BtnMenu.Tag = "Menu3dot";
-            BtnMenu.Text = "...";
             BtnMenu.UseVisualStyleBackColor = true;
             BtnMenu.Click += BtnMenu_Click;
             // 
@@ -259,10 +248,10 @@ namespace SharpBrowser
             BtnHome.IconColor = System.Drawing.Color.Black;
             BtnHome.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnHome.IconSize = 30;
-            BtnHome.Location = new System.Drawing.Point(834, 5);
+            BtnHome.Location = new System.Drawing.Point(841, 17);
             BtnHome.Margin = new Padding(3, 4, 3, 4);
             BtnHome.Name = "BtnHome";
-            BtnHome.Size = new System.Drawing.Size(36, 34);
+            BtnHome.Size = new System.Drawing.Size(36, 30);
             BtnHome.TabIndex = 6;
             BtnHome.Tag = "Home";
             BtnHome.UseVisualStyleBackColor = true;
@@ -274,11 +263,11 @@ namespace SharpBrowser
             TabPages.Dock = DockStyle.Fill;
             TabPages.Font = new System.Drawing.Font("Segoe UI", 10.8F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, 0);
             TabPages.Items.AddRange(new Controls.BrowserTabStrip.BrowserTabStripItem[] { tabStrip1, tabStripAdd });
-            TabPages.Location = new System.Drawing.Point(0, 45);
+            TabPages.Location = new System.Drawing.Point(0, 65);
             TabPages.Name = "TabPages";
             TabPages.Padding = new Padding(1, 49, 1, 1);
             TabPages.SelectedItem = tabStrip1;
-            TabPages.Size = new System.Drawing.Size(916, 427);
+            TabPages.Size = new System.Drawing.Size(916, 407);
             TabPages.TabIndex = 4;
             TabPages.Text = "faTabStrip1";
             TabPages.TabStripItemSelectionChanged += OnTabsChanged;
@@ -292,7 +281,7 @@ namespace SharpBrowser
             tabStrip1.Location = new System.Drawing.Point(1, 49);
             tabStrip1.Name = "tabStrip1";
             tabStrip1.Selected = true;
-            tabStrip1.Size = new System.Drawing.Size(914, 377);
+            tabStrip1.Size = new System.Drawing.Size(914, 357);
             tabStrip1.TabIndex = 0;
             tabStrip1.Title = "Loading...";
             // 
@@ -380,6 +369,26 @@ namespace SharpBrowser
             TxtSearch.TextChanged += TxtSearch_TextChanged;
             TxtSearch.KeyDown += TxtSearch_KeyDown;
             // 
+            // PanelToolbar
+            // 
+            PanelToolbar.Controls.Add(lbl_ZoomLevel);
+            PanelToolbar.Controls.Add(BtnBack);
+            PanelToolbar.Controls.Add(BtnForward);
+            PanelToolbar.Controls.Add(BtnRefresh);
+            PanelToolbar.Controls.Add(TxtURL);
+            PanelToolbar.Controls.Add(BtnDownloads);
+            PanelToolbar.Controls.Add(BtnHome);
+            PanelToolbar.Controls.Add(BtnMenu);
+            PanelToolbar.Controls.Add(BtnStop);
+            PanelToolbar.Dock = DockStyle.Top;
+            PanelToolbar.lay_ChildAxisAlignment = SharpBrowser.Controls.StackChildAxisAlignment.Center;
+            PanelToolbar.lay_Orientation = SharpBrowser.Controls.StackOrientation.Horizontal;
+            PanelToolbar.lay_PerformLayout_calcMethod_No = 4;
+            PanelToolbar.Location = new System.Drawing.Point(0, 0);
+            PanelToolbar.Name = "PanelToolbar";
+            PanelToolbar.Size = new System.Drawing.Size(916, 65);
+            PanelToolbar.TabIndex = 10;
+            // 
             // MainForm
             // 
             AutoScaleMode = AutoScaleMode.None;
@@ -396,12 +405,12 @@ namespace SharpBrowser
             FormClosing += MainForm_FormClosing;
             Load += MainForm_Load;
             menuStripTab.ResumeLayout(false);
-            PanelToolbar.ResumeLayout(false);
-            PanelToolbar.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)TabPages).EndInit();
             TabPages.ResumeLayout(false);
             PanelSearch.ResumeLayout(false);
             PanelSearch.PerformLayout();
+            PanelToolbar.ResumeLayout(false);
+            PanelToolbar.PerformLayout();
             ResumeLayout(false);
         }
 
@@ -421,7 +430,6 @@ namespace SharpBrowser
 		private FontAwesome.Sharp.IconButton BtnRefresh;
 		private FontAwesome.Sharp.IconButton BtnDownloads;
 		private System.Windows.Forms.TextBox TxtURL;
-		private System.Windows.Forms.Panel PanelToolbar;
 		private System.Windows.Forms.Panel PanelSearch;
 		private System.Windows.Forms.TextBox TxtSearch;
 		private System.Windows.Forms.Button BtnCloseSearch;
@@ -430,6 +438,7 @@ namespace SharpBrowser
         private FontAwesome.Sharp.IconButton BtnHome;
         private FontAwesome.Sharp.IconButton BtnMenu;
         private Label lbl_ZoomLevel;
+        private Controls.StackLayout PanelToolbar;
     }
 }
 
