@@ -1,24 +1,31 @@
 ﻿using System;
-using System.Collections;
+using System.Collections; // Required for Hashtable
 using System.ComponentModel;
 using System.Windows.Forms;
-using System.Diagnostics; // Optional for debugging
+using System.Diagnostics;
+using System.Collections.Generic;
+using System.Linq; // Optional: If using LayoutLogger inside Setters
 
-namespace SharpBrowser.Controls // Your namespace
+namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
 {
-    // --- ProvideProperty Attributes ---
-    // Note: Ensure the ExpandWeight one matches your final choice (lay_ or not)
+    /// <summary>
+    /// Provides extender properties (like lay_ExpandWeight, lay_IsFloating) for controls
+    /// contained within a StackLayout panel. This is a partial class definition,
+    /// merged with StackLayout.cs by the compiler.
+    /// </summary>
     [ProvideProperty("lay_ExpandWeight", typeof(Control))]
     [ProvideProperty("lay_IsFloating", typeof(Control))]
     [ProvideProperty("lay_FloatTargetName", typeof(Control))]
     [ProvideProperty("lay_FloatOffsetX", typeof(Control))]
     [ProvideProperty("lay_FloatOffsetY", typeof(Control))]
-    [ProvideProperty("lay_FloatAlignment", typeof(Control))] 
-    [ProvideProperty("lay_FloatZOrder", typeof(Control))] 
-    public class StackLayoutExtender : Component, IExtenderProvider
+    [ProvideProperty("lay_FloatAlignment", typeof(Control))]
+    [ProvideProperty("lay_FloatZOrder", typeof(Control))]
+    public partial class StackLayout : IExtenderProvider // Inherits Panel from other file, implements IExtenderProvider here
     {
-        // --- Backing Hashtables ---
-        private Hashtable _expandWeights = new Hashtable(); // Or _lay_expandWeights if you prefixed
+        // --- Private Fields (Storage for Provided Properties) ---
+        // These Hashtables store the extender property values associated with each child control.
+        // They are instance members of the StackLayout class.
+        private Hashtable _expandWeights = new Hashtable();
         private Hashtable _lay_isFloatingFlags = new Hashtable();
         private Hashtable _lay_floatTargetNames = new Hashtable();
         private Hashtable _lay_floatOffsetsX = new Hashtable();
@@ -26,199 +33,221 @@ namespace SharpBrowser.Controls // Your namespace
         private Hashtable _lay_floatAlignments = new Hashtable();
         private Hashtable _lay_floatZOrderModes = new Hashtable();
 
-        #region IExtenderProvider Members
 
+        #region IExtenderProvider Implementation
+
+        /// <summary>
+        /// Determines if this StackLayout panel can provide extender properties to the given object.
+        /// It can only extend properties to controls that are its direct children.
+        /// </summary>
+        /// <param name="extendee">The object to potentially extend.</param>
+        /// <returns>True if extendee is a Control and its Parent is this StackLayout, false otherwise.</returns>
         public bool CanExtend(object extendee)
         {
-            // Extend any Control whose Parent is a StackLayout
-            return (extendee is Control control && control.Parent is StackLayout);
+            // 'this' refers to the StackLayout instance itself
+            return (extendee is Control control && control.Parent == this);
         }
 
         #endregion
 
-        // --- Provided Properties ---
+        #region Provided Property Getters/Setters
 
-        #region lay_FloatZOrder Property (Provided)
-        [DefaultValue(StackFloatZOrder.InFrontOfTarget)] // Default enum value
-        [Category(StackLayout.categorySTR)] // Use the category defined in StackLayout
-        [Description("Defines how this floating control's Z-order is managed relative to its target during layout. AboveTarget (Default), BelowTarget, or Manual (respects designer settings).")]
-        public StackFloatZOrder Getlay_FloatZOrder(Control control) // Getter name MUST match ProvideProperty
-        {
-            // Return the stored value or the default if not set
-            return _lay_floatZOrderModes.Contains(control) ? (StackFloatZOrder)_lay_floatZOrderModes[control] : StackFloatZOrder.InFrontOfTarget;
-        }
-        public void Setlay_FloatZOrder(Control control, StackFloatZOrder zOrderMode) // Setter name MUST match ProvideProperty
-        {
-            // Store the selected enum value
-            if (Getlay_FloatZOrder(control) == zOrderMode) return; // No change
-            _lay_floatZOrderModes[control] = zOrderMode;
-
-            // IMPORTANT: Do NOT trigger PerformLayout here.
-            // Changing the Z-order *mode* only affects how the *next* layout is performed.
-            // It doesn't require an immediate re-layout itself and calling it here
-            // could interfere with designer actions or cause unnecessary churn.
-            // Z-order changes will be applied during the next natural layout cycle
-            // triggered by other events (resize, visibility change, etc.)
-        }
-        #endregion
-
-
-        #region lay_FloatAlignment Property (Provided)
-        [DefaultValue(FloatAlignment.TopLeft)] // Set default
-        [Category(StackLayout.categorySTR)]
-        [Description("Specifies how the floating control is initially positioned relative to its target before offsets are applied.")]
-        public FloatAlignment Getlay_FloatAlignment(Control control) // Prefixed
-        {
-            return _lay_floatAlignments.Contains(control) ? (FloatAlignment)_lay_floatAlignments[control] : FloatAlignment.TopLeft; // Default
-        }
-        public void Setlay_FloatAlignment(Control control, FloatAlignment alignment) // Prefixed
-        {
-            if (Getlay_FloatAlignment(control) == alignment) return; // No change
-            _lay_floatAlignments[control] = alignment;
-            if (control?.Parent is StackLayout parentStackLayout)
-            {
-                parentStackLayout.PerformLayout();
-                parentStackLayout.Invalidate(true);
-            }
-        }
-        #endregion
-
-
-        #region lay_ExpandWeight Property (Provided)
+        // --- lay_ExpandWeight ---
         [DefaultValue(0)]
         [Description("The weight used to distribute extra space along the orientation axis. 0 = no expansion. Positive values distribute remaining space proportionally.")]
-        [Category(StackLayout.categorySTR)]
-        public int Getlay_ExpandWeight(Control control) // Ensure name matches ProvideProperty
+        [Category(categorySTR)] // categorySTR constant is defined in StackLayout.cs
+        public int Getlay_ExpandWeight(Control control)
         {
-            // Use appropriate Hashtable name if you changed it
+            // Retrieve the value from the Hashtable or return the default (0)
             return _expandWeights.Contains(control) ? (int)_expandWeights[control] : 0;
         }
-        public void Setlay_ExpandWeight(Control control, int weight) // Ensure name matches ProvideProperty
+        public void Setlay_ExpandWeight(Control control, int weight)
         {
-            weight = Math.Max(0, weight);
-            // Use appropriate Hashtable name if you changed it
+            weight = Math.Max(0, weight); // Ensure weight is not negative
             int currentWeight = Getlay_ExpandWeight(control);
-            if (currentWeight == weight) return;
 
-            _expandWeights[control] = weight; // Use appropriate Hashtable name
-            if (control?.Parent is StackLayout parentStackLayout)
+            if (currentWeight != weight)
             {
-                // Debug.WriteLine($"StackLayoutExtender DEBUG: Setlay_ExpandWeight triggering PerformLayout on '{parentStackLayout.Name}' for control '{control.Name}'");
-                parentStackLayout.PerformLayout();
-                parentStackLayout.Invalidate(true);
+                _expandWeights[control] = weight; // Store the new value
+
+                // If the control is actually parented by this panel, trigger layout
+                if (control?.Parent == this)
+                {
+                    LayoutLogger.Log($"StackLayout [{this.Name}]: Setlay_ExpandWeight on '{control.Name}' to {weight}. Triggering PerformLayout.");
+                    this.PerformLayout(); // 'this' refers to the StackLayout instance
+                    this.Invalidate(true); // Ensure repaint reflects potential size changes
+                }
             }
         }
-        #endregion
 
-        #region lay_IsFloating Property (Provided)
+        // --- lay_IsFloating ---
         [DefaultValue(false)]
-        [Category(StackLayout.categorySTR)]
+        [Category(categorySTR)]
         [Description("If true, the control is positioned relative to a lay_FloatTargetName control instead of being part of the stack flow.")]
-        public bool Getlay_IsFloating(Control control) // Prefixed
+        public bool Getlay_IsFloating(Control control)
         {
             return _lay_isFloatingFlags.Contains(control) ? (bool)_lay_isFloatingFlags[control] : false;
         }
-        public void Setlay_IsFloating(Control control, bool isFloating) // Prefixed
+        public void Setlay_IsFloating(Control control, bool isFloating)
         {
-            if (Getlay_IsFloating(control) == isFloating) return; // No change
-            _lay_isFloatingFlags[control] = isFloating;
-            if (control?.Parent is StackLayout parentStackLayout)
+            if (Getlay_IsFloating(control) != isFloating)
             {
-                parentStackLayout.PerformLayout();
-                parentStackLayout.Invalidate(true);
+                _lay_isFloatingFlags[control] = isFloating;
+                if (control?.Parent == this)
+                {
+                    LayoutLogger.Log($"StackLayout [{this.Name}]: Setlay_IsFloating on '{control.Name}' to {isFloating}. Triggering PerformLayout.");
+                    PerformLayout();
+                    Invalidate(true);
+                }
             }
         }
-        #endregion
 
-        #region lay_FloatTargetName Property (Provided)
+        // --- lay_FloatTargetName ---
         [DefaultValue("")]
-        [Category(StackLayout.categorySTR)]
+        [Category(categorySTR)]
         [Description("The Name of the sibling control this floating control should be positioned relative to.")]
-        public string Getlay_FloatTargetName(Control control) // Prefixed
+        [TypeConverter(typeof(FloatTargetNameConverter))] // Optional: Add a TypeConverter for dropdown in designer
+        public string Getlay_FloatTargetName(Control control)
         {
             return _lay_floatTargetNames.Contains(control) ? (string)_lay_floatTargetNames[control] : "";
         }
-        public void Setlay_FloatTargetName(Control control, string targetName) // Prefixed
+        public void Setlay_FloatTargetName(Control control, string targetName)
         {
-            targetName = targetName ?? ""; // Normalize null
-            if (Getlay_FloatTargetName(control) == targetName) return; // No change
-            _lay_floatTargetNames[control] = targetName;
-            if (control?.Parent is StackLayout parentStackLayout)
+            targetName = targetName ?? ""; // Normalize null to empty string
+            if (Getlay_FloatTargetName(control) != targetName)
             {
-                parentStackLayout.PerformLayout();
-                parentStackLayout.Invalidate(true);
+                _lay_floatTargetNames[control] = targetName;
+                if (control?.Parent == this)
+                {
+                    LayoutLogger.Log($"StackLayout [{this.Name}]: Setlay_FloatTargetName on '{control.Name}' to '{targetName}'. Triggering PerformLayout.");
+                    PerformLayout();
+                    Invalidate(true);
+                }
             }
         }
-        #endregion
 
-        #region lay_FloatOffsetX Property (Provided)
+        // --- lay_FloatOffsetX ---
         [DefaultValue(0)]
-        [Category(StackLayout.categorySTR)]
-        [Description("The horizontal offset (in pixels) relative to the lay_FloatTargetName control's Left edge.")]
-        public int Getlay_FloatOffsetX(Control control) // Prefixed
+        [Category(categorySTR)]
+        [Description("The horizontal offset (in pixels) relative to the floating target's alignment point.")]
+        public int Getlay_FloatOffsetX(Control control)
         {
             return _lay_floatOffsetsX.Contains(control) ? (int)_lay_floatOffsetsX[control] : 0;
         }
-        public void Setlay_FloatOffsetX(Control control, int offsetX) // Prefixed
+        public void Setlay_FloatOffsetX(Control control, int offsetX)
         {
-            if (Getlay_FloatOffsetX(control) == offsetX) return; // No change
-            _lay_floatOffsetsX[control] = offsetX;
-            if (control?.Parent is StackLayout parentStackLayout)
+            if (Getlay_FloatOffsetX(control) != offsetX)
             {
-                parentStackLayout.PerformLayout();
-                parentStackLayout.Invalidate(true);
+                _lay_floatOffsetsX[control] = offsetX;
+                if (control?.Parent == this)
+                {
+                    LayoutLogger.Log($"StackLayout [{this.Name}]: Setlay_FloatOffsetX on '{control.Name}' to {offsetX}. Triggering PerformLayout.");
+                    PerformLayout();
+                    Invalidate(true);
+                }
             }
         }
-        #endregion
 
-        #region lay_FloatOffsetY Property (Provided)
+        // --- lay_FloatOffsetY ---
         [DefaultValue(0)]
-        [Category(StackLayout.categorySTR)]
-        [Description("The vertical offset (in pixels) relative to the lay_FloatTargetName control's Top edge.")]
-        public int Getlay_FloatOffsetY(Control control) // Prefixed
+        [Category(categorySTR)]
+        [Description("The vertical offset (in pixels) relative to the floating target's alignment point.")]
+        public int Getlay_FloatOffsetY(Control control)
         {
             return _lay_floatOffsetsY.Contains(control) ? (int)_lay_floatOffsetsY[control] : 0;
         }
-        public void Setlay_FloatOffsetY(Control control, int offsetY) // Prefixed
+        public void Setlay_FloatOffsetY(Control control, int offsetY)
         {
-            if (Getlay_FloatOffsetY(control) == offsetY) return; // No change
-            _lay_floatOffsetsY[control] = offsetY;
-            if (control?.Parent is StackLayout parentStackLayout)
+            if (Getlay_FloatOffsetY(control) != offsetY)
             {
-                parentStackLayout.PerformLayout();
-                parentStackLayout.Invalidate(true);
-            }
-        }
-        #endregion
-
-
-        #region Component Designer Generated Code
-        // --- Standard Component Designer Code ---
-        private System.ComponentModel.IContainer components = null;
-        public StackLayoutExtender(System.ComponentModel.IContainer container) { container.Add(this); InitializeComponent(); }
-        public StackLayoutExtender() { InitializeComponent(); }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                if (components != null){
-                    components.Dispose();
+                _lay_floatOffsetsY[control] = offsetY;
+                if (control?.Parent == this)
+                {
+                    LayoutLogger.Log($"StackLayout [{this.Name}]: Setlay_FloatOffsetY on '{control.Name}' to {offsetY}. Triggering PerformLayout.");
+                    PerformLayout();
+                    Invalidate(true);
                 }
-                // Clear all Hashtables to release control references
-                _expandWeights?.Clear();
-                _lay_isFloatingFlags?.Clear();
-                _lay_floatTargetNames?.Clear();
-                _lay_floatOffsetsX?.Clear();
-                _lay_floatOffsetsY?.Clear();
-                _lay_floatAlignments?.Clear();
-                _lay_floatZOrderModes?.Clear();  
             }
-            // No unmanaged resources to free, but call base class
-            base.Dispose(disposing);
         }
-        private void InitializeComponent() { components = new System.ComponentModel.Container(); }
+
+        // --- lay_FloatAlignment ---
+        [DefaultValue(FloatAlignment.TopLeft)]
+        [Category(categorySTR)]
+        [Description("Specifies how the floating control is initially positioned relative to its target before offsets are applied.")]
+        public FloatAlignment Getlay_FloatAlignment(Control control)
+        {
+            return _lay_floatAlignments.Contains(control) ? (FloatAlignment)_lay_floatAlignments[control] : FloatAlignment.TopLeft;
+        }
+        public void Setlay_FloatAlignment(Control control, FloatAlignment alignment)
+        {
+            if (Getlay_FloatAlignment(control) != alignment)
+            {
+                _lay_floatAlignments[control] = alignment;
+                if (control?.Parent == this)
+                {
+                    LayoutLogger.Log($"StackLayout [{this.Name}]: Setlay_FloatAlignment on '{control.Name}' to {alignment}. Triggering PerformLayout.");
+                    PerformLayout();
+                    Invalidate(true);
+                }
+            }
+        }
+
+        // --- lay_FloatZOrder ---
+        [DefaultValue(StackFloatZOrder.InFrontOfTarget)]
+        [Category(categorySTR)]
+        [Description("Defines how this floating control's Z-order is managed relative to its target during layout.")]
+        public StackFloatZOrder Getlay_FloatZOrder(Control control)
+        {
+            return _lay_floatZOrderModes.Contains(control) ? (StackFloatZOrder)_lay_floatZOrderModes[control] : StackFloatZOrder.InFrontOfTarget;
+        }
+        public void Setlay_FloatZOrder(Control control, StackFloatZOrder zOrderMode)
+        {
+            if (Getlay_FloatZOrder(control) != zOrderMode)
+            {
+                _lay_floatZOrderModes[control] = zOrderMode;
+                // Changing the Z-order *mode* only affects how the *next* layout pass behaves.
+                // It does not require an immediate PerformLayout() itself.
+                // The Z-order will be applied during the next layout cycle triggered by other means.
+                if (control?.Parent == this)
+                {
+                    LayoutLogger.Log($"StackLayout [{this.Name}]: Setlay_FloatZOrder on '{control.Name}' to {zOrderMode}. No immediate PerformLayout needed.");
+                    // Optional: Could trigger Invalidate if visual debugging is needed immediately, but not required for layout.
+                    // this.Invalidate(true);
+                }
+            }
+        }
+
         #endregion
 
-    } // End Class StackLayoutExtender
+        // --- Optional: TypeConverter for FloatTargetName ---
+        // This helper class provides a dropdown list of sibling control names
+        // in the designer for the lay_FloatTargetName property.
+        internal class FloatTargetNameConverter : StringConverter
+        {
+            public override bool GetStandardValuesSupported(ITypeDescriptorContext context) => true;
+            public override bool GetStandardValuesExclusive(ITypeDescriptorContext context) => false; // Allow typing names too
+
+            public override StandardValuesCollection GetStandardValues(ITypeDescriptorContext context)
+            {
+                List<string> names = new List<string>();
+                names.Add(""); // Option for no target (relative to panel)
+
+                if (context?.Instance is Control sourceControl && sourceControl.Parent is StackLayout stackLayout)
+                {
+                    // Add names of all *other* visible controls within the same StackLayout
+                    foreach (Control sibling in stackLayout.Controls.OfType<Control>())
+                    {
+                        if (sibling != sourceControl && sibling.Visible && !string.IsNullOrEmpty(sibling.Name))
+                        {
+                            names.Add(sibling.Name);
+                        }
+                    }
+                }
+                return new StandardValuesCollection(names.OrderBy(n => n).ToList());
+            }
+        }
+
+    } // End partial class StackLayout
 } // End namespace
+
+// --- END OF FILE StackLayout.Extender.cs ---
