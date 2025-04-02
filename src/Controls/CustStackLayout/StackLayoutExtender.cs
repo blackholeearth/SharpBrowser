@@ -20,6 +20,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
     [ProvideProperty("lay_FloatOffsetY", typeof(Control))]
     [ProvideProperty("lay_FloatAlignment", typeof(Control))]
     [ProvideProperty("lay_FloatZOrder", typeof(Control))]
+    [ProvideProperty("lay_IncludeHiddenInLayout", typeof(Control))]
     public partial class StackLayout : IExtenderProvider // Inherits Panel from other file, implements IExtenderProvider here
     {
         // --- Private Fields (Storage for Provided Properties) ---
@@ -32,7 +33,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         private Hashtable _lay_floatOffsetsY = new Hashtable();
         private Hashtable _lay_floatAlignments = new Hashtable();
         private Hashtable _lay_floatZOrderModes = new Hashtable();
-
+        private Hashtable _lay_includeHiddenInLayout = new Hashtable();
 
         #region IExtenderProvider Implementation
 
@@ -217,7 +218,32 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
             }
         }
 
+        // --- lay_IncludeHiddenInLayout (NEW PROPERTY) ---
+        [DefaultValue(false)] // Default is NOT to include hidden controls
+        [Category(categorySTR)]
+        [Description("If true, this control will reserve space in the layout calculation even when its Visible property is false. If false (default), hidden controls are ignored by the layout unless they are floating.")]
+        public bool Getlay_IncludeHiddenInLayout(Control control)
+        {
+            // Return stored value or the default (false) if not set
+            return _lay_includeHiddenInLayout.Contains(control) ? (bool)_lay_includeHiddenInLayout[control] : false;
+        }
+        public void Setlay_IncludeHiddenInLayout(Control control, bool include)
+        {
+            if (Getlay_IncludeHiddenInLayout(control) != include)
+            {
+                _lay_includeHiddenInLayout[control] = include;
+                // Changing this requires a layout recalculation
+                if (control?.Parent == this)
+                {
+                    LayoutLogger.Log($"StackLayout [{this.Name}]: Setlay_IncludeHiddenInLayout on '{control.Name}' to {include}. Triggering PerformLayout.");
+                    this.PerformLayout();
+                    this.Invalidate(true); // Repaint might be needed if spacing changes
+                }
+            }
+        }
+
         #endregion
+
 
         // --- Optional: TypeConverter for FloatTargetName ---
         // This helper class provides a dropdown list of sibling control names
@@ -247,7 +273,8 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
             }
         }
 
+
+
     } // End partial class StackLayout
 } // End namespace
 
-// --- END OF FILE StackLayout.Extender.cs ---

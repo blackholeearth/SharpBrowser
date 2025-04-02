@@ -9,6 +9,9 @@ using System.Windows.Forms;
 
 namespace SharpBrowser.Controls // Ensure this namespace matches your project
 {
+
+    #region related Enums - StackOrientation ,StackChildAxisAlignment , FloatAlignment , StackFloatZOrder
+
     /// <summary>
     /// Specifies the direction in which child controls are stacked within a StackLayout.
     /// </summary>
@@ -52,6 +55,9 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
         Manual
     }
 
+    #endregion
+
+
     /// <summary>
     /// A panel that arranges child controls sequentially in a single line (horizontally or vertically),
     /// supporting weighted expansion and relative positioning of floating elements.
@@ -59,6 +65,61 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
     /// </summary>
     public partial class StackLayout : Panel
     {
+
+        // --- Add a Timer for Throttling Layout ---
+        private Timer _layoutThrottleTimer;
+        private Control _pendingLayoutChildControl = null; // Track which child triggered layout
+        void init_ThrottleTimer()
+        {
+            // --- Initialize the throttle timer ---
+            _layoutThrottleTimer = new Timer();
+            _layoutThrottleTimer.Interval = 200; // 50 milliseconds throttle delay (adjust as needed)
+            _layoutThrottleTimer.Tick += OnLayoutThrottleTimerTick;
+            _layoutThrottleTimer.Enabled = false; // Start disabled
+        }
+        void dispose_ThrottleTimer() 
+        {
+            // --- Dispose of the timer ---
+            if (_layoutThrottleTimer != null)
+            {
+                _layoutThrottleTimer.Stop(); // Ensure timer is stopped
+                _layoutThrottleTimer.Dispose();
+                _layoutThrottleTimer = null;
+                LayoutLogger.Log($"StackLayout [{this.Name}]: Disposed Layout Throttle Timer.");
+            }
+        }
+        /// <summary>
+        /// Timer Tick event handler. Executes PerformLayout after the throttle delay.
+        /// </summary>
+        private void OnLayoutThrottleTimerTick(object sender, EventArgs e)
+        {
+            _layoutThrottleTimer.Enabled = false; // Disable timer immediately
+
+            Control child = _pendingLayoutChildControl; // Get the stored child
+            _pendingLayoutChildControl = null;       // Clear it
+
+            // --- Double-check control state *again* before layout ---
+            // (Crucial as events are async, state might have changed in the delay)
+            if (this.IsDisposed || child == null || child.IsDisposed || child.Parent != this)
+            {
+                LayoutLogger.Log($"StackLayout [{this.Name}]: OnLayoutThrottleTimerTick - Aborting layout (Disposed or child state changed for '{child?.Name ?? "null"}').");
+                return; // Abort if state invalid
+            }
+
+            LayoutLogger.Log($"StackLayout [{this.Name}]: OnLayoutThrottleTimerTick - Throttled delay finished. Performing layout for '{child.Name}'.");
+            try
+            {
+                this.PerformLayout();
+                // Invalidate might be needed if visibility changes affect clipping or overlap
+                // this.Invalidate(true);
+            }
+            catch (Exception ex)
+            {
+                LayoutLogger.Log($"StackLayout ERROR [{this.Name}]: Exception during throttled PerformLayout in OnLayoutThrottleTimerTick for '{child.Name}': {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+
         // --- Constants ---
         public const string categorySTR = "L_Layout2";
 
@@ -71,6 +132,9 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
         private IComponentChangeService _componentChangeService = null;
         private bool _isPerformingLayout = false;
 
+        public bool SuspendLayout_byUser = false;
+
+        
         // NOTE: Hashtables for extender properties are defined in StackLayout.Extender.cs
 
         #region Public Layout Properties (Prefixed and Categorized)
@@ -183,11 +247,16 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
         {
             // Optional optimization for smoother drawing, especially with many controls
             this.DoubleBuffered = true;
+
+            init_ThrottleTimer();
         }
 
         // --- Core Layout Logic Switch ---
         protected override void OnLayout(LayoutEventArgs levent)
         {
+            if (SuspendLayout_byUser)
+                return;
+
             // Optimization: Don't layout if invisible or disposing
             if (!this.Visible || this.IsDisposed || this.Disposing)
             {
@@ -305,27 +374,46 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
         /// <summary>
         /// Phase 1 (v0/v4): Separates visible child controls into flow and floating lists.
         /// </summary>
-        private void PL_p1__Separate_Visible_Controls_into_Flow_and_Floating(
-            out List<Control> flowControls, 
-            out List<Control> floatingControls)
+        private void PL_p1__Separate_Visible_Controls_into_Flow_and_Floating(out List<Control> flowControls, out List<Control> floatingControls)
         {
-            var allVisibleControls = this.Controls.OfType<Control>().Where(c => c.Visible).ToList();
             flowControls = new List<Control>();
             floatingControls = new List<Control>();
 
-            // Calls Getlay_IsFloating via 'this' (method defined in other partial file)
-            foreach (Control child in allVisibleControls)
+            LayoutLogger.Log($"--- PL_p1: Separating Controls ---");
+
+            // Iterate through ALL controls in the panel
+            foreach (Control child in this.Controls.OfType<Control>())
             {
-                if (this.Getlay_IsFloating(child))
+                // Determine if the control should participate in layout calculations at all
+                bool isVisible = child.Visible;
+                // Use the new extender property getter via 'this'
+                bool includeWhenHidden = this.Getlay_IncludeHiddenInLayout(child);
+
+                // Include if EITHER Visible OR explicitly included while hidden
+                bool shouldIncludeInLayout = isVisible || includeWhenHidden;
+
+                LayoutLogger.Log($"  Control '{child.Name}': Visible={isVisible}, IncludeHidden={includeWhenHidden} => ShouldInclude={shouldIncludeInLayout}");
+
+                if (shouldIncludeInLayout)
                 {
-                    floatingControls.Add(child);
+                    // Now check if it's floating or part of the flow
+                    if (this.Getlay_IsFloating(child))
+                    {
+                        floatingControls.Add(child);
+                        LayoutLogger.Log($"    -> Added to Floating Controls.");
+                    }
+                    else
+                    {
+                        flowControls.Add(child);
+                        LayoutLogger.Log($"    -> Added to Flow Controls.");
+                    }
                 }
                 else
                 {
-                    flowControls.Add(child);
+                    LayoutLogger.Log($"    -> Excluded from layout.");
                 }
             }
-            LayoutLogger.Log($"Layout Pass v0: Flow Controls ({flowControls.Count}), Floating Controls ({floatingControls.Count})");
+            LayoutLogger.Log($"--- PL_p1: Separation Complete. Flow={flowControls.Count}, Floating={floatingControls.Count} ---");
         }
 
         /// <summary>
@@ -896,6 +984,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             LayoutLogger.Log($"StackLayout [{this.Name}]: OnControlAdded - PerformLayout call COMPLETED.");
         }
 
+        // --- OnControlRemoved Method ---
         protected override void OnControlRemoved(ControlEventArgs e)
         {
             LayoutLogger.Log($"StackLayout [{this.Name}]: OnControlRemoved FIRED for '{e.Control?.Name ?? "null"}'.");
@@ -905,8 +994,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 // Unsubscribe when removed
                 e.Control.VisibleChanged -= ChildControl_VisibleChanged;
 
-                // Also remove extender property values associated with the removed control
-                // (Prevents memory leaks from Hashtables holding references)
+                // Remove extender property values associated with the removed control
                 _expandWeights?.Remove(e.Control);
                 _lay_isFloatingFlags?.Remove(e.Control);
                 _lay_floatTargetNames?.Remove(e.Control);
@@ -914,9 +1002,12 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 _lay_floatOffsetsY?.Remove(e.Control);
                 _lay_floatAlignments?.Remove(e.Control);
                 _lay_floatZOrderModes?.Remove(e.Control);
+                // --- REMOVE FROM NEW HASHTABLE ---
+                _lay_includeHiddenInLayout?.Remove(e.Control);
+
                 LayoutLogger.Log($"StackLayout [{this.Name}]: Cleared extender properties for removed control '{e.Control.Name}'.");
             }
-            // Adding/removing controls inherently requires relayout
+            // Removing controls inherently requires relayout
             LayoutLogger.Log($"StackLayout [{this.Name}]: OnControlRemoved TRIGGERING PerformLayout for '{e.Control?.Name ?? "null"}'.");
             PerformLayout();
             Invalidate(true);
@@ -924,44 +1015,66 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
         }
 
         /// <summary>
-        /// Handles the VisibleChanged event of child controls to trigger layout updates at runtime.
+        /// Handles the VisibleChanged event of child controls.
+        /// Now throttles PerformLayout calls using a Timer.
         /// </summary>
         private void ChildControl_VisibleChanged(object sender, EventArgs e)
         {
             Control child = sender as Control;
-            LayoutLogger.Log($"StackLayout [{this.Name}]: ChildControl_VisibleChanged FIRED for '{child?.Name ?? "null"}'. Visible={child?.Visible}.");
+            LayoutLogger.Log($"StackLayout [{this.Name}]: ChildControl_VisibleChanged FIRED for '{child?.Name ?? "null"}'. Visible={child?.Visible}. Throttling...");
 
-            // Check if the control is still parented by this StackLayout and not disposed
             if (child != null && child.Parent == this && !this.IsDisposed && !child.IsDisposed)
             {
-                // Perform layout asynchronously via BeginInvoke to avoid issues during complex UI updates
-                if (this.IsHandleCreated)
-                {
-                    // *** CHANGE HERE: Call BeginInvoke with the named method ***
-                    this.BeginInvoke(new Action<Control>(HandleChildVisibilityChangeLayout), child);
-                }
-                else
-                {
-                    // If handle not created yet (e.g., during form load), synchronous layout is usually okay
-                    LayoutLogger.Log($"StackLayout [{this.Name}]: ChildControl_VisibleChanged PerformLayout (Sync) for '{child.Name}'.");
-                    try
-                    {
-                        this.PerformLayout();
-                        // this.Invalidate(true); // Optional: uncomment if needed
-                    }
-                    catch (Exception ex)
-                    {
-                        LayoutLogger.Log($"StackLayout ERROR [{this.Name}]: Exception during synchronous PerformLayout in ChildControl_VisibleChanged: {ex.Message}\n{ex.StackTrace}");
-                    }
-                }
+                _pendingLayoutChildControl = child; // Store the child that triggered the layout
+                _layoutThrottleTimer.Enabled = true; // Enable/restart the timer
             }
             else if (child != null && child.Parent != this)
             {
-                // Defensive unsubscribe if the child was reparented before the handler ran
+                // Defensive unsubscribe
                 LayoutLogger.Log($"StackLayout [{this.Name}]: ChildControl_VisibleChanged - Child '{child.Name}' no longer parented. Unsubscribing.");
                 child.VisibleChanged -= ChildControl_VisibleChanged;
             }
         }
+
+        ///// <summary>
+        ///// Handles the VisibleChanged event of child controls to trigger layout updates at runtime.
+        ///// </summary>
+        //private void ChildControl_VisibleChanged__old(object sender, EventArgs e)
+        //{
+        //    Control child = sender as Control;
+        //    LayoutLogger.Log($"StackLayout [{this.Name}]: ChildControl_VisibleChanged FIRED for '{child?.Name ?? "null"}'. Visible={child?.Visible}.");
+
+        //    // Check if the control is still parented by this StackLayout and not disposed
+        //    if (child != null && child.Parent == this && !this.IsDisposed && !child.IsDisposed)
+        //    {
+        //        // Perform layout asynchronously via BeginInvoke to avoid issues during complex UI updates
+        //        if (this.IsHandleCreated)
+        //        {
+        //            // *** CHANGE HERE: Call BeginInvoke with the named method ***
+        //            this.BeginInvoke(new Action<Control>(HandleChildVisibilityChangeLayout), child);
+        //        }
+        //        else
+        //        {
+        //            // If handle not created yet (e.g., during form load), synchronous layout is usually okay
+        //            LayoutLogger.Log($"StackLayout [{this.Name}]: ChildControl_VisibleChanged PerformLayout (Sync) for '{child.Name}'.");
+        //            try
+        //            {
+        //                this.PerformLayout();
+        //                // this.Invalidate(true); // Optional: uncomment if needed
+        //            }
+        //            catch (Exception ex)
+        //            {
+        //                LayoutLogger.Log($"StackLayout ERROR [{this.Name}]: Exception during synchronous PerformLayout in ChildControl_VisibleChanged: {ex.Message}\n{ex.StackTrace}");
+        //            }
+        //        }
+        //    }
+        //    else if (child != null && child.Parent != this)
+        //    {
+        //        // Defensive unsubscribe if the child was reparented before the handler ran
+        //        LayoutLogger.Log($"StackLayout [{this.Name}]: ChildControl_VisibleChanged - Child '{child.Name}' no longer parented. Unsubscribing.");
+        //        child.VisibleChanged -= ChildControl_VisibleChanged;
+        //    }
+        //}
 
         /// <summary>
         /// Private helper method called via BeginInvoke to handle layout updates
@@ -1027,15 +1140,6 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
 
 
 
-
-     
-
-
-
-
-
-
-
         /// <summary>
         /// Manages component change notifications from the designer environment.
         /// </summary>
@@ -1072,7 +1176,6 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 }
             }
         }
-
 
         /// <summary>
         /// Handles component change events from the designer. Triggers layout if a relevant
@@ -1162,14 +1265,17 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
 
         #endregion
 
-        // --- Dispose Method ---
+
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
                 LayoutLogger.Log($"StackLayout [{this.Name}]: Dispose({disposing}) called.");
 
-                // Unsubscribe from component change service
+                dispose_ThrottleTimer();
+
+                // Unsubscribe logic...
                 if (_componentChangeService != null)
                 {
                     _componentChangeService.ComponentChanged -= OnComponentChanged;
@@ -1185,8 +1291,6 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 LayoutLogger.Log($"StackLayout [{this.Name}]: Unsubscribed from child VisibleChanged events during Dispose.");
 
                 // Clear the Hashtables (defined in the other partial file, but accessible)
-                // This is crucial to release references to controls that might have been removed
-                // without the OnControlRemoved event firing correctly (e.g., during form close).
                 _expandWeights?.Clear();
                 _lay_isFloatingFlags?.Clear();
                 _lay_floatTargetNames?.Clear();
@@ -1194,10 +1298,41 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 _lay_floatOffsetsY?.Clear();
                 _lay_floatAlignments?.Clear();
                 _lay_floatZOrderModes?.Clear();
+                // --- CLEAR NEW HASHTABLE ---
+                _lay_includeHiddenInLayout?.Clear();
                 LayoutLogger.Log($"StackLayout [{this.Name}]: Cleared extender property Hashtables during Dispose.");
             }
             base.Dispose(disposing);
         }
+
+        //protected override void Dispose(bool disposing)
+        //{
+        //    if (disposing)
+        //    {
+        //        LayoutLogger.Log($"StackLayout [{this.Name}]: Dispose({disposing}) called.");
+
+        //        dispose_ThrottleTimer();
+
+        //        // Unsubscribe logic...
+        //        if (_componentChangeService != null) { /* ... */ }
+        //        foreach (Control c in this.Controls.OfType<Control>()) { /* ... */ }
+
+        //        // Clear the Hashtables
+        //        _expandWeights?.Clear();
+        //        _lay_isFloatingFlags?.Clear();
+        //        _lay_floatTargetNames?.Clear();
+        //        _lay_floatOffsetsX?.Clear();
+        //        _lay_floatOffsetsY?.Clear();
+        //        _lay_floatAlignments?.Clear();
+        //        _lay_floatZOrderModes?.Clear();
+        //        // --- CLEAR NEW HASHTABLE ---
+        //        _lay_includeHiddenInLayout?.Clear();
+
+        //        LayoutLogger.Log($"StackLayout [{this.Name}]: Cleared extender property Hashtables during Dispose.");
+        //    }
+        //    base.Dispose(disposing);
+        //}
+
 
     } // End partial class StackLayout
 } // End namespace
