@@ -259,21 +259,23 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             {
                 return;
             }
-
             base.OnLayout(levent);
 
+            var sw1 = new Stopwatch();
+            sw1.Start();
             // Use the selected calculation method
             switch (lay_PerformLayout_calcMethod_No)
             {
                 case 4:
                     PerformStackLayout_v4();
-                    Debug.WriteLine("-------PerformStackLayout_v4-----------completed");
                     break;
                 case 0:
                 default:
                     PerformStackLayout_old_v0(); // Flexible designer mode
                     break;
             }
+            sw1.Stop();
+            LayoutLogger.Log($" ------- PerformStackLayout_v{lay_PerformLayout_calcMethod_No} ------- completed :{sw1.ElapsedMilliseconds} ms.");
         }
 
         #region Layout Method 0 (Flexible Designer Mode) and Helpers
