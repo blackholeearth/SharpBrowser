@@ -50,19 +50,25 @@ namespace SharpBrowser {
 			InitTooltips(this.Controls);
 			InitHotkeys();
 
-			TxtURL.MakeTextbox_CustomBorderColor();
 
-			//cant  do this on gui. paneltoolbar gets deleted. buggy designer 
-			//PanelToolbar location Fix -2025
-			PanelToolbar.Dock = DockStyle.None;
-			PanelToolbar.BringToFront();
-			PanelToolbar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-			PanelToolbar.Location = new Point(0, TabPages.TabButton_Height + 1); //for different dpi, need stable way to get it.				 
-			PanelToolbar.Width = this.Width;
-			PanelToolbar.Width = pnlToolbarOverlay.Width;
+            this.SuspendLayout();
+            PanelToolbar.SuspendLayout();
+            {
+                TxtURL.MakeTextbox_CustomBorderColor();
 
+                //cant  do this on gui. paneltoolbar gets deleted. buggy designer 
+                //PanelToolbar location Fix -2025
+                PanelToolbar.Dock = DockStyle.None;
+			    PanelToolbar.BringToFront();
+			    PanelToolbar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+			    PanelToolbar.Location = new Point(0, TabPages.TabButton_Height + 1); //for different dpi, need stable way to get it.				 
+			    PanelToolbar.Width = this.Width;
+			    PanelToolbar.Width = pnlToolbarOverlay.Width;
+            }
+            PanelToolbar.ResumeLayout(true);
+            this.ResumeLayout(true);
 
-			if (Debugger.IsAttached)
+            if (Debugger.IsAttached)
 				pnlToolbarOverlay.BackColor = Color.Cyan;
 
 		}

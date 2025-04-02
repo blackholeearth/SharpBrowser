@@ -120,6 +120,8 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
         }
 
 
+
+
         // --- Constants ---
         public const string categorySTR = "L_Layout2";
 
@@ -131,8 +133,6 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
 
         private IComponentChangeService _componentChangeService = null;
         private bool _isPerformingLayout = false;
-
-        public bool SuspendLayout_byUser = false;
 
         
         // NOTE: Hashtables for extender properties are defined in StackLayout.Extender.cs
@@ -254,9 +254,6 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
         // --- Core Layout Logic Switch ---
         protected override void OnLayout(LayoutEventArgs levent)
         {
-            if (SuspendLayout_byUser)
-                return;
-
             // Optimization: Don't layout if invisible or disposing
             if (!this.Visible || this.IsDisposed || this.Disposing)
             {
@@ -270,6 +267,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             {
                 case 4:
                     PerformStackLayout_v4();
+                    Debug.WriteLine("testtttttt---hittttt--------PerformStackLayout_v4");
                     break;
                 case 0:
                 default:
@@ -392,7 +390,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 // Include if EITHER Visible OR explicitly included while hidden
                 bool shouldIncludeInLayout = isVisible || includeWhenHidden;
 
-                LayoutLogger.Log($"  Control '{child.Name}': Visible={isVisible}, IncludeHidden={includeWhenHidden} => ShouldInclude={shouldIncludeInLayout}");
+                //LayoutLogger.Log($"  Control '{child.Name}': Visible={isVisible}, IncludeHidden={includeWhenHidden} => ShouldInclude={shouldIncludeInLayout}");
 
                 if (shouldIncludeInLayout)
                 {
@@ -400,17 +398,17 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                     if (this.Getlay_IsFloating(child))
                     {
                         floatingControls.Add(child);
-                        LayoutLogger.Log($"    -> Added to Floating Controls.");
+                        //LayoutLogger.Log($"    -> Added to Floating Controls.");
                     }
                     else
                     {
                         flowControls.Add(child);
-                        LayoutLogger.Log($"    -> Added to Flow Controls.");
+                        //LayoutLogger.Log($"    -> Added to Flow Controls.");
                     }
                 }
                 else
                 {
-                    LayoutLogger.Log($"    -> Excluded from layout.");
+                    //LayoutLogger.Log($"    -> Excluded from layout.");
                 }
             }
             LayoutLogger.Log($"--- PL_p1: Separation Complete. Flow={flowControls.Count}, Floating={floatingControls.Count} ---");
@@ -977,8 +975,14 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 // Subscribe to VisibleChanged for runtime layout updates
                 e.Control.VisibleChanged += ChildControl_VisibleChanged;
             }
+
+            var parentForm = this.FindForm();
+            if (!this.Visible || !(parentForm?.Visible ??false) )
+                return;
+
             // Adding/removing controls inherently requires relayout
             LayoutLogger.Log($"StackLayout [{this.Name}]: OnControlAdded TRIGGERING PerformLayout for '{e.Control?.Name ?? "null"}'.");
+            
             PerformLayout();
             Invalidate(true); // Ensure repaint
             LayoutLogger.Log($"StackLayout [{this.Name}]: OnControlAdded - PerformLayout call COMPLETED.");
@@ -1133,8 +1137,9 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             // Layout might be needed when becoming visible if content changed while hidden
             if (this.Visible)
             {
-                PerformLayout();
-                Invalidate();
+                _layoutThrottleTimer.Enabled = true;
+                //PerformLayout();
+                //Invalidate();
             }
         }
 

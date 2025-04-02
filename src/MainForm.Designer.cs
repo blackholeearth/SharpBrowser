@@ -59,7 +59,6 @@ namespace SharpBrowser
             TabPages.SuspendLayout();
             PanelSearch.SuspendLayout();
             PanelToolbar.SuspendLayout();
-            PanelToolbar.SuspendLayout_byUser = true;
             SuspendLayout();
             // 
             // menuStripTab
@@ -412,7 +411,6 @@ namespace SharpBrowser
             TabPages.ResumeLayout(false);
             PanelSearch.ResumeLayout(false);
             PanelSearch.PerformLayout();
-            PanelToolbar.SuspendLayout_byUser=false;
             PanelToolbar.ResumeLayout(false);
             PanelToolbar.PerformLayout();
             ResumeLayout(false);
