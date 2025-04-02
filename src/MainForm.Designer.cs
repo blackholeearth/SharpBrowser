@@ -174,7 +174,7 @@ namespace SharpBrowser
             BtnDownloads.IconColor = System.Drawing.Color.Black;
             BtnDownloads.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnDownloads.IconSize = 30;
-            BtnDownloads.Location = new System.Drawing.Point(772, 17);
+            BtnDownloads.Location = new System.Drawing.Point(738, 17);
             BtnDownloads.Margin = new Padding(3, 4, 3, 4);
             BtnDownloads.Name = "BtnDownloads";
             BtnDownloads.Size = new System.Drawing.Size(36, 30);
@@ -191,7 +191,7 @@ namespace SharpBrowser
             TxtURL.Location = new System.Drawing.Point(156, 15);
             TxtURL.Margin = new Padding(3, 4, 3, 4);
             TxtURL.Name = "TxtURL";
-            TxtURL.Size = new System.Drawing.Size(604, 34);
+            TxtURL.Size = new System.Drawing.Size(570, 34);
             TxtURL.TabIndex = 5;
             TxtURL.Click += TxtURL_Click;
             TxtURL.Enter += TxtURL_Enter;
@@ -208,7 +208,7 @@ namespace SharpBrowser
             PanelToolbar.Setlay_FloatTargetName(lbl_ZoomLevel, "TxtURL");
             PanelToolbar.Setlay_FloatZOrder(lbl_ZoomLevel, SharpBrowser.Controls.StackFloatZOrder.Manual);
             PanelToolbar.Setlay_IsFloating(lbl_ZoomLevel, true);
-            lbl_ZoomLevel.Location = new System.Drawing.Point(707, 22);
+            lbl_ZoomLevel.Location = new System.Drawing.Point(673, 22);
             lbl_ZoomLevel.Name = "lbl_ZoomLevel";
             lbl_ZoomLevel.Size = new System.Drawing.Size(42, 20);
             lbl_ZoomLevel.TabIndex = 9;
@@ -230,7 +230,7 @@ namespace SharpBrowser
             BtnMenu.IconColor = System.Drawing.Color.Black;
             BtnMenu.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnMenu.IconSize = 30;
-            BtnMenu.Location = new System.Drawing.Point(868, 17);
+            BtnMenu.Location = new System.Drawing.Point(834, 17);
             BtnMenu.Margin = new Padding(3, 4, 3, 4);
             BtnMenu.Name = "BtnMenu";
             BtnMenu.Size = new System.Drawing.Size(36, 30);
@@ -250,7 +250,7 @@ namespace SharpBrowser
             BtnHome.IconColor = System.Drawing.Color.Black;
             BtnHome.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnHome.IconSize = 30;
-            BtnHome.Location = new System.Drawing.Point(820, 17);
+            BtnHome.Location = new System.Drawing.Point(786, 17);
             BtnHome.Margin = new Padding(3, 4, 3, 4);
             BtnHome.Name = "BtnHome";
             BtnHome.Size = new System.Drawing.Size(36, 30);
@@ -269,7 +269,7 @@ namespace SharpBrowser
             TabPages.Name = "TabPages";
             TabPages.Padding = new Padding(1, 49, 1, 1);
             TabPages.SelectedItem = tabStrip1;
-            TabPages.Size = new System.Drawing.Size(916, 407);
+            TabPages.Size = new System.Drawing.Size(882, 513);
             TabPages.TabIndex = 4;
             TabPages.Text = "faTabStrip1";
             TabPages.TabStripItemSelectionChanged += OnTabsChanged;
@@ -283,7 +283,7 @@ namespace SharpBrowser
             tabStrip1.Location = new System.Drawing.Point(1, 49);
             tabStrip1.Name = "tabStrip1";
             tabStrip1.Selected = true;
-            tabStrip1.Size = new System.Drawing.Size(914, 357);
+            tabStrip1.Size = new System.Drawing.Size(880, 463);
             tabStrip1.TabIndex = 0;
             tabStrip1.Title = "Loading...";
             // 
@@ -307,7 +307,7 @@ namespace SharpBrowser
             PanelSearch.Controls.Add(BtnPrevSearch);
             PanelSearch.Controls.Add(BtnCloseSearch);
             PanelSearch.Controls.Add(TxtSearch);
-            PanelSearch.Location = new System.Drawing.Point(592, 115);
+            PanelSearch.Location = new System.Drawing.Point(558, 115);
             PanelSearch.Name = "PanelSearch";
             PanelSearch.Size = new System.Drawing.Size(307, 49);
             PanelSearch.TabIndex = 9;
@@ -390,13 +390,13 @@ namespace SharpBrowser
             PanelToolbar.Location = new System.Drawing.Point(0, 0);
             PanelToolbar.Name = "PanelToolbar";
             PanelToolbar.Padding = new Padding(12, 0, 12, 0);
-            PanelToolbar.Size = new System.Drawing.Size(916, 65);
+            PanelToolbar.Size = new System.Drawing.Size(882, 65);
             PanelToolbar.TabIndex = 10;
             // 
             // MainForm
             // 
             AutoScaleMode = AutoScaleMode.None;
-            ClientSize = new System.Drawing.Size(916, 472);
+            ClientSize = new System.Drawing.Size(882, 578);
             Controls.Add(PanelSearch);
             Controls.Add(TabPages);
             Controls.Add(PanelToolbar);

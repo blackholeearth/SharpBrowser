@@ -1270,7 +1270,9 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             // Let's keep it for now, but be mindful if performance issues arise during resize.
             LayoutLogger.Log($"StackLayout [{this.Name}]: OnSizeChanged FIRED.");
             base.OnSizeChanged(e);
-            PerformLayout();
+
+            //PerformLayout();
+            _layoutThrottleTimer.Enabled = true;
         }
 
         protected override void OnVisibleChanged(EventArgs e)
@@ -1380,9 +1382,12 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                     {
                         try
                         {
-                            this.PerformLayout();
-                            this.Invalidate(true); // Repaint might be needed
-                            LayoutLogger.Log($"StackLayout [{this.Name}]: OnComponentChanged - Direct PerformLayout call COMPLETED.");
+                            //this.PerformLayout();
+                            //this.Invalidate(true); // Repaint might be needed
+                            //LayoutLogger.Log($"StackLayout [{this.Name}]: OnComponentChanged - Direct PerformLayout call COMPLETED.");
+                            LayoutLogger.Log($"StackLayout [{this.Name}]: OnComponentChanged - throttled PerformLayout call COMPLETED.");
+                            _layoutThrottleTimer.Enabled = true;
+                            
                         }
                         catch (Exception ex)
                         {
