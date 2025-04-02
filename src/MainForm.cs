@@ -69,6 +69,9 @@ namespace SharpBrowser {
                 PanelToolbar.Location = new Point(0, TabPages.TabButton_Height + 1); //for different dpi, need stable way to get it.				 
                 PanelToolbar.Width = this.Width;
                 PanelToolbar.Width = pnlToolbarOverlay.Width;
+
+                pnlToolbarOverlay.Height = PanelToolbar.Height + 9;
+
             }
             PanelToolbar.ResumeLayout(false);
             this.ResumeLayout(false);
