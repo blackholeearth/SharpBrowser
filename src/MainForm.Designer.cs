@@ -94,7 +94,7 @@ namespace SharpBrowser
             BtnRefresh.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnRefresh.IconSize = 30;
             PanelToolbar.Setlay_IncludeHiddenInLayout(BtnRefresh, true);
-            BtnRefresh.Location = new System.Drawing.Point(96, 17);
+            BtnRefresh.Location = new System.Drawing.Point(108, 17);
             BtnRefresh.Margin = new Padding(3, 4, 3, 4);
             BtnRefresh.Name = "BtnRefresh";
             BtnRefresh.Size = new System.Drawing.Size(36, 30);
@@ -114,7 +114,7 @@ namespace SharpBrowser
             PanelToolbar.Setlay_FloatTargetName(BtnStop, "BtnRefresh");
             PanelToolbar.Setlay_FloatZOrder(BtnStop, SharpBrowser.Controls.StackFloatZOrder.Manual);
             PanelToolbar.Setlay_IsFloating(BtnStop, true);
-            BtnStop.Location = new System.Drawing.Point(96, 17);
+            BtnStop.Location = new System.Drawing.Point(108, 17);
             BtnStop.Margin = new Padding(3, 4, 3, 4);
             BtnStop.Name = "BtnStop";
             BtnStop.Size = new System.Drawing.Size(36, 30);
@@ -132,7 +132,7 @@ namespace SharpBrowser
             BtnForward.IconColor = System.Drawing.Color.Black;
             BtnForward.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnForward.IconSize = 30;
-            BtnForward.Location = new System.Drawing.Point(48, 17);
+            BtnForward.Location = new System.Drawing.Point(60, 17);
             BtnForward.Margin = new Padding(3, 4, 3, 4);
             BtnForward.Name = "BtnForward";
             BtnForward.Size = new System.Drawing.Size(36, 30);
@@ -150,7 +150,7 @@ namespace SharpBrowser
             BtnBack.IconColor = System.Drawing.Color.Black;
             BtnBack.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnBack.IconSize = 30;
-            BtnBack.Location = new System.Drawing.Point(0, 17);
+            BtnBack.Location = new System.Drawing.Point(12, 17);
             BtnBack.Margin = new Padding(3, 4, 3, 4);
             BtnBack.Name = "BtnBack";
             BtnBack.Size = new System.Drawing.Size(36, 30);
@@ -174,7 +174,7 @@ namespace SharpBrowser
             BtnDownloads.IconColor = System.Drawing.Color.Black;
             BtnDownloads.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnDownloads.IconSize = 30;
-            BtnDownloads.Location = new System.Drawing.Point(784, 17);
+            BtnDownloads.Location = new System.Drawing.Point(772, 17);
             BtnDownloads.Margin = new Padding(3, 4, 3, 4);
             BtnDownloads.Name = "BtnDownloads";
             BtnDownloads.Size = new System.Drawing.Size(36, 30);
@@ -188,10 +188,10 @@ namespace SharpBrowser
             TxtURL.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             TxtURL.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, 0);
             PanelToolbar.Setlay_ExpandWeight(TxtURL, 1);
-            TxtURL.Location = new System.Drawing.Point(144, 15);
+            TxtURL.Location = new System.Drawing.Point(156, 15);
             TxtURL.Margin = new Padding(3, 4, 3, 4);
             TxtURL.Name = "TxtURL";
-            TxtURL.Size = new System.Drawing.Size(628, 34);
+            TxtURL.Size = new System.Drawing.Size(604, 34);
             TxtURL.TabIndex = 5;
             TxtURL.Click += TxtURL_Click;
             TxtURL.Enter += TxtURL_Enter;
@@ -207,7 +207,7 @@ namespace SharpBrowser
             PanelToolbar.Setlay_FloatOffsetY(lbl_ZoomLevel, 7);
             PanelToolbar.Setlay_FloatTargetName(lbl_ZoomLevel, "TxtURL");
             PanelToolbar.Setlay_IsFloating(lbl_ZoomLevel, true);
-            lbl_ZoomLevel.Location = new System.Drawing.Point(707, 22);
+            lbl_ZoomLevel.Location = new System.Drawing.Point(695, 22);
             lbl_ZoomLevel.Name = "lbl_ZoomLevel";
             lbl_ZoomLevel.Size = new System.Drawing.Size(42, 20);
             lbl_ZoomLevel.TabIndex = 9;
@@ -229,7 +229,7 @@ namespace SharpBrowser
             BtnMenu.IconColor = System.Drawing.Color.Black;
             BtnMenu.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnMenu.IconSize = 30;
-            BtnMenu.Location = new System.Drawing.Point(880, 17);
+            BtnMenu.Location = new System.Drawing.Point(868, 17);
             BtnMenu.Margin = new Padding(3, 4, 3, 4);
             BtnMenu.Name = "BtnMenu";
             BtnMenu.Size = new System.Drawing.Size(36, 30);
@@ -249,7 +249,7 @@ namespace SharpBrowser
             BtnHome.IconColor = System.Drawing.Color.Black;
             BtnHome.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnHome.IconSize = 30;
-            BtnHome.Location = new System.Drawing.Point(832, 17);
+            BtnHome.Location = new System.Drawing.Point(820, 17);
             BtnHome.Margin = new Padding(3, 4, 3, 4);
             BtnHome.Name = "BtnHome";
             BtnHome.Size = new System.Drawing.Size(36, 30);
@@ -388,6 +388,7 @@ namespace SharpBrowser
             PanelToolbar.lay_Spacing = 12;
             PanelToolbar.Location = new System.Drawing.Point(0, 0);
             PanelToolbar.Name = "PanelToolbar";
+            PanelToolbar.Padding = new Padding(12, 0, 12, 0);
             PanelToolbar.Size = new System.Drawing.Size(916, 65);
             PanelToolbar.TabIndex = 10;
             // 
