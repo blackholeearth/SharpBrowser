@@ -267,7 +267,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             {
                 case 4:
                     PerformStackLayout_v4();
-                    Debug.WriteLine("testtttttt---hittttt--------PerformStackLayout_v4");
+                    Debug.WriteLine("-------PerformStackLayout_v4-----------completed");
                     break;
                 case 0:
                 default:
@@ -999,8 +999,8 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 e.Control.VisibleChanged -= ChildControl_VisibleChanged;
 
                 // Remove extender property values associated with the removed control
-                _expandWeights?.Remove(e.Control);
-                _lay_isFloatingFlags?.Remove(e.Control);
+                _lay_expandWeights?.Remove(e.Control);
+                _lay_isFloating?.Remove(e.Control);
                 _lay_floatTargetNames?.Remove(e.Control);
                 _lay_floatOffsetsX?.Remove(e.Control);
                 _lay_floatOffsetsY?.Remove(e.Control);
@@ -1296,8 +1296,8 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 LayoutLogger.Log($"StackLayout [{this.Name}]: Unsubscribed from child VisibleChanged events during Dispose.");
 
                 // Clear the Hashtables (defined in the other partial file, but accessible)
-                _expandWeights?.Clear();
-                _lay_isFloatingFlags?.Clear();
+                _lay_expandWeights?.Clear();
+                _lay_isFloating?.Clear();
                 _lay_floatTargetNames?.Clear();
                 _lay_floatOffsetsX?.Clear();
                 _lay_floatOffsetsY?.Clear();

@@ -15,25 +15,25 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
     /// </summary>
     [ProvideProperty("lay_ExpandWeight", typeof(Control))]
     [ProvideProperty("lay_IsFloating", typeof(Control))]
+    [ProvideProperty("lay_IncludeHiddenInLayout", typeof(Control))]
     [ProvideProperty("lay_FloatTargetName", typeof(Control))]
     [ProvideProperty("lay_FloatOffsetX", typeof(Control))]
     [ProvideProperty("lay_FloatOffsetY", typeof(Control))]
     [ProvideProperty("lay_FloatAlignment", typeof(Control))]
     [ProvideProperty("lay_FloatZOrder", typeof(Control))]
-    [ProvideProperty("lay_IncludeHiddenInLayout", typeof(Control))]
     public partial class StackLayout : IExtenderProvider // Inherits Panel from other file, implements IExtenderProvider here
     {
         // --- Private Fields (Storage for Provided Properties) ---
         // These Hashtables store the extender property values associated with each child control.
         // They are instance members of the StackLayout class.
-        private Hashtable _expandWeights = new Hashtable();
-        private Hashtable _lay_isFloatingFlags = new Hashtable();
-        private Hashtable _lay_floatTargetNames = new Hashtable();
-        private Hashtable _lay_floatOffsetsX = new Hashtable();
-        private Hashtable _lay_floatOffsetsY = new Hashtable();
-        private Hashtable _lay_floatAlignments = new Hashtable();
-        private Hashtable _lay_floatZOrderModes = new Hashtable();
-        private Hashtable _lay_includeHiddenInLayout = new Hashtable();
+        private new Dictionary<Control, int> _lay_expandWeights = new Dictionary<Control, int>();
+        private new Dictionary<Control, bool> _lay_isFloating = new Dictionary<Control, bool>();
+        private new Dictionary<Control, string> _lay_floatTargetNames = new Dictionary<Control, string>();
+        private new Dictionary<Control, int> _lay_floatOffsetsX = new Dictionary<Control, int>();
+        private new Dictionary<Control, int> _lay_floatOffsetsY = new Dictionary<Control, int>();
+        private new Dictionary<Control, FloatAlignment> _lay_floatAlignments = new Dictionary<Control, FloatAlignment>();
+        private new Dictionary<Control, StackFloatZOrder> _lay_floatZOrderModes = new Dictionary<Control, StackFloatZOrder>();
+        private new Dictionary<Control, bool> _lay_includeHiddenInLayout = new Dictionary<Control, bool>();
 
         #region IExtenderProvider Implementation
 
@@ -60,7 +60,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         public int Getlay_ExpandWeight(Control control)
         {
             // Retrieve the value from the Hashtable or return the default (0)
-            return _expandWeights.Contains(control) ? (int)_expandWeights[control] : 0;
+            return _lay_expandWeights.ContainsKey(control) ? (int)_lay_expandWeights[control] : 0;
         }
         public void Setlay_ExpandWeight(Control control, int weight)
         {
@@ -69,7 +69,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
 
             if (currentWeight != weight)
             {
-                _expandWeights[control] = weight; // Store the new value
+                _lay_expandWeights[control] = weight; // Store the new value
 
                 // If the control is actually parented by this panel, trigger layout
                 if (control?.Parent == this)
@@ -87,13 +87,13 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [Description("If true, the control is positioned relative to a lay_FloatTargetName control instead of being part of the stack flow.")]
         public bool Getlay_IsFloating(Control control)
         {
-            return _lay_isFloatingFlags.Contains(control) ? (bool)_lay_isFloatingFlags[control] : false;
+            return _lay_isFloating.ContainsKey(control) ? (bool)_lay_isFloating[control] : false;
         }
         public void Setlay_IsFloating(Control control, bool isFloating)
         {
             if (Getlay_IsFloating(control) != isFloating)
             {
-                _lay_isFloatingFlags[control] = isFloating;
+                _lay_isFloating[control] = isFloating;
                 if (control?.Parent == this)
                 {
                     LayoutLogger.Log($"StackLayout [{this.Name}]: Setlay_IsFloating on '{control.Name}' to {isFloating}. Triggering PerformLayout.");
@@ -110,7 +110,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [TypeConverter(typeof(FloatTargetNameConverter))] // Optional: Add a TypeConverter for dropdown in designer
         public string Getlay_FloatTargetName(Control control)
         {
-            return _lay_floatTargetNames.Contains(control) ? (string)_lay_floatTargetNames[control] : "";
+            return _lay_floatTargetNames.ContainsKey(control) ? (string)_lay_floatTargetNames[control] : "";
         }
         public void Setlay_FloatTargetName(Control control, string targetName)
         {
@@ -133,7 +133,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [Description("The horizontal offset (in pixels) relative to the floating target's alignment point.")]
         public int Getlay_FloatOffsetX(Control control)
         {
-            return _lay_floatOffsetsX.Contains(control) ? (int)_lay_floatOffsetsX[control] : 0;
+            return _lay_floatOffsetsX.ContainsKey(control) ? (int)_lay_floatOffsetsX[control] : 0;
         }
         public void Setlay_FloatOffsetX(Control control, int offsetX)
         {
@@ -155,7 +155,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [Description("The vertical offset (in pixels) relative to the floating target's alignment point.")]
         public int Getlay_FloatOffsetY(Control control)
         {
-            return _lay_floatOffsetsY.Contains(control) ? (int)_lay_floatOffsetsY[control] : 0;
+            return _lay_floatOffsetsY.ContainsKey(control) ? (int)_lay_floatOffsetsY[control] : 0;
         }
         public void Setlay_FloatOffsetY(Control control, int offsetY)
         {
@@ -177,7 +177,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [Description("Specifies how the floating control is initially positioned relative to its target before offsets are applied.")]
         public FloatAlignment Getlay_FloatAlignment(Control control)
         {
-            return _lay_floatAlignments.Contains(control) ? (FloatAlignment)_lay_floatAlignments[control] : FloatAlignment.TopLeft;
+            return _lay_floatAlignments.ContainsKey(control) ? (FloatAlignment)_lay_floatAlignments[control] : FloatAlignment.TopLeft;
         }
         public void Setlay_FloatAlignment(Control control, FloatAlignment alignment)
         {
@@ -199,7 +199,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [Description("Defines how this floating control's Z-order is managed relative to its target during layout.")]
         public StackFloatZOrder Getlay_FloatZOrder(Control control)
         {
-            return _lay_floatZOrderModes.Contains(control) ? (StackFloatZOrder)_lay_floatZOrderModes[control] : StackFloatZOrder.InFrontOfTarget;
+            return _lay_floatZOrderModes.ContainsKey(control) ? (StackFloatZOrder)_lay_floatZOrderModes[control] : StackFloatZOrder.InFrontOfTarget;
         }
         public void Setlay_FloatZOrder(Control control, StackFloatZOrder zOrderMode)
         {
@@ -225,7 +225,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         public bool Getlay_IncludeHiddenInLayout(Control control)
         {
             // Return stored value or the default (false) if not set
-            return _lay_includeHiddenInLayout.Contains(control) ? (bool)_lay_includeHiddenInLayout[control] : false;
+            return _lay_includeHiddenInLayout.ContainsKey(control) ? (bool)_lay_includeHiddenInLayout[control] : false;
         }
         public void Setlay_IncludeHiddenInLayout(Control control, bool include)
         {
