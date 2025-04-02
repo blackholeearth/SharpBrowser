@@ -45,7 +45,16 @@ namespace SharpBrowser {
             this.SuspendLayout();
             PanelToolbar.SuspendLayout();
             {
-                TxtURL.MakeTextbox_CustomBorderColor();
+                var txtURL_wrapper1 = TxtURL.MakeTextbox_CustomBorderColor();
+
+                var lblZoom_props = PanelToolbar.GetPropertiesOrDefault(lbl_ZoomLevel);
+                lblZoom_props.FloatTargetName = txtURL_wrapper1.Name;
+                var offsetY = (int)(txtURL_wrapper1.Height / 2 - lbl_ZoomLevel.Height / 2);
+                lblZoom_props.FloatOffsetY = offsetY + txtURL_wrapper1.borderThickness*2+1;
+                lblZoom_props.FloatOffsetX += -(txtURL_wrapper1.borderThickness + txtURL_wrapper1.CornerRadius/2);
+                //PanelToolbar.Setlay_FloatOffsetY(lbl_ZoomLevel, 12);
+                lbl_ZoomLevel.BringToFront();
+                
 
                 //cant  do this on gui. paneltoolbar gets deleted. buggy designer 
                 //PanelToolbar location Fix -2025

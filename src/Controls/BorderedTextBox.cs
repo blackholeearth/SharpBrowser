@@ -28,8 +28,9 @@ namespace SharpBrowser.Controls
             var anchor = tbx.Anchor;
             var dock = tbx.Dock;
             var child_index = tbxOriginalParent.Controls.GetChildIndex(tbx);
+            var name = tbx.Name+"_wrapper1";
 
-            
+
             //restore them to Panel
             var panel = new BorderedTextBox(tbx);
             panel.Location = loc;
@@ -39,7 +40,7 @@ namespace SharpBrowser.Controls
             panel.Dock = dock;
             tbxOriginalParent.Controls.Add(panel);
             tbxOriginalParent.Controls.SetChildIndex(panel, child_index);
-
+            panel.Name = name; 
 
             panel.BackColor = Color.Transparent; 
             ////debug
@@ -59,6 +60,7 @@ namespace SharpBrowser.Controls
     // https://stackoverflow.com/questions/17466067/change-border-color-in-textbox-c-sharp/39420512#39420512
     public class BorderedTextBox : Panel
     {
+
         private TextBox textBox;
         private bool focusedAlways = false;
         private Color normalBorderColor = Color.LightGray;
@@ -66,6 +68,7 @@ namespace SharpBrowser.Controls
         //private Color focusedBorderColor = Color.FromArgb(0,00,225);
         private Color focusedBorderColor = Color.FromArgb(11, 87, 208);
         public int borderThickness = 2;
+        public int CornerRadius => 15;
 
         public TextBox TextBox
         {
@@ -113,8 +116,8 @@ namespace SharpBrowser.Controls
         protected override void OnPaint(PaintEventArgs e)
         {
             this.Padding = new Padding(
-                left:15+borderThickness,
-                right: 15 + borderThickness,
+                left: CornerRadius + borderThickness,
+                right: CornerRadius + borderThickness,
                 top:1+borderThickness+5,
                 bottom:borderThickness+5 
                 );
@@ -145,7 +148,7 @@ namespace SharpBrowser.Controls
                     new Rectangle(0 + borderThickness, 0 + borderThickness,
                     this.ClientSize.Width - borderThickness * 2,
                     this.ClientSize.Height - borderThickness * 2)
-                    , 15);
+                    , CornerRadius);
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
 
                 //e.Graphics.DrawRectangle(borderPen,
@@ -153,7 +156,7 @@ namespace SharpBrowser.Controls
                     new Rectangle(0+borderThickness, 0 + borderThickness, 
                     this.ClientSize.Width - borderThickness*2, 
                     this.ClientSize.Height - borderThickness*2)
-                    ,15);
+                    , CornerRadius);
             }
             base.OnPaint(e);
         }

@@ -10,7 +10,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
 {
 
     // --- StackProperties Class ---
-    internal class StackProperties
+    public class StackProperties
     {
         // Define properties with default values
         public int Weight { get; set; } = 0;
@@ -80,7 +80,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         #endregion
 
         // --- Helper Method Implementation ---
-        private StackProperties GetPropertiesOrDefault(Control control)
+        public StackProperties GetPropertiesOrDefault(Control control)
         {
             if (_lay_properties.TryGetValue(control, out StackProperties props))
             {
@@ -103,21 +103,13 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         }
 
         #region Provided Property Getters/Setters
-        private StackProperties Common_GetProp(Control control)
-        {
-            if (_lay_properties.TryGetValue(control, out StackProperties props))
-            {
-                return props;
-            }
-            // Return the default value if no props object exists
-            return StackProperties.Defaults;
-        }
+        //private StackProperties Common_GetProp(Control control) => GetPropertiesOrDefault(control);
 
         // --- lay_ExpandWeight ---
         [DefaultValue(0)]
         [Description("The weight used to distribute extra space along the orientation axis. 0 = no expansion. Positive values distribute remaining space proportionally.")]
         [Category(categorySTR)] // categorySTR constant is defined in StackLayout.cs
-        public int Getlay_ExpandWeight(Control control) => Common_GetProp(control).Weight;
+        public int Getlay_ExpandWeight(Control control) => GetPropertiesOrDefault(control).Weight;
         public void Setlay_ExpandWeight(Control control, int weight)
         {
             weight = Math.Max(0, weight); // Ensure weight is not negative
@@ -141,7 +133,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [DefaultValue(false)]
         [Category(categorySTR)]
         [Description("If true, the control is positioned relative to a lay_FloatTargetName control instead of being part of the stack flow.")]
-        public bool Getlay_IsFloating(Control control) => Common_GetProp(control).IsFloating;
+        public bool Getlay_IsFloating(Control control) => GetPropertiesOrDefault(control).IsFloating;
         public void Setlay_IsFloating(Control control, bool isFloating)
         {
             StackProperties props = GetOrCreateProperties(control);
@@ -164,7 +156,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [Category(categorySTR)]
         [Description("The Name of the sibling control this floating control should be positioned relative to.")]
         [TypeConverter(typeof(FloatTargetNameConverter))] // Optional: Add a TypeConverter for dropdown in designer
-        public string Getlay_FloatTargetName(Control control) => Common_GetProp(control).FloatTargetName;
+        public string Getlay_FloatTargetName(Control control) => GetPropertiesOrDefault(control).FloatTargetName;
         public void Setlay_FloatTargetName(Control control, string targetName)
         {
             targetName = targetName ?? ""; // Normalize null to empty string
@@ -187,7 +179,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [DefaultValue(0)]
         [Category(categorySTR)]
         [Description("The horizontal offset (in pixels) relative to the floating target's alignment point.")]
-        public int Getlay_FloatOffsetX(Control control) => Common_GetProp(control).FloatOffsetX;
+        public int Getlay_FloatOffsetX(Control control) => GetPropertiesOrDefault(control).FloatOffsetX;
         public void Setlay_FloatOffsetX(Control control, int offsetX)
         {
             StackProperties props = GetOrCreateProperties(control);
@@ -209,7 +201,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [DefaultValue(0)]
         [Category(categorySTR)]
         [Description("The vertical offset (in pixels) relative to the floating target's alignment point.")]
-        public int Getlay_FloatOffsetY(Control control) => Common_GetProp(control).FloatOffsetY;
+        public int Getlay_FloatOffsetY(Control control) => GetPropertiesOrDefault(control).FloatOffsetY;
         public void Setlay_FloatOffsetY(Control control, int offsetY)
         {
             StackProperties props = GetOrCreateProperties(control);
@@ -231,7 +223,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [DefaultValue(FloatAlignment.TopLeft)]
         [Category(categorySTR)]
         [Description("Specifies how the floating control is initially positioned relative to its target before offsets are applied.")]
-        public FloatAlignment Getlay_FloatAlignment(Control control) => Common_GetProp(control).FloatAlignment;
+        public FloatAlignment Getlay_FloatAlignment(Control control) => GetPropertiesOrDefault(control).FloatAlignment;
         public void Setlay_FloatAlignment(Control control, FloatAlignment alignment)
         {
             StackProperties props = GetOrCreateProperties(control);
@@ -253,7 +245,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [DefaultValue(StackFloatZOrder.InFrontOfTarget)]
         [Category(categorySTR)]
         [Description("Defines how this floating control's Z-order is managed relative to its target during layout.")]
-        public StackFloatZOrder Getlay_FloatZOrder(Control control) => Common_GetProp(control).FloatZOrder;
+        public StackFloatZOrder Getlay_FloatZOrder(Control control) => GetPropertiesOrDefault(control).FloatZOrder;
         public void Setlay_FloatZOrder(Control control, StackFloatZOrder zOrderMode)
         {
             StackProperties props = GetOrCreateProperties(control);
@@ -277,7 +269,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [DefaultValue(false)] // Default is NOT to include hidden controls
         [Category(categorySTR)]
         [Description("If true, this control will reserve space in the layout calculation even when its Visible property is false. If false (default), hidden controls are ignored by the layout unless they are floating.")]
-        public bool Getlay_IncludeHiddenInLayout(Control control) => Common_GetProp(control).IncludeHiddenInLayout;
+        public bool Getlay_IncludeHiddenInLayout(Control control) => GetPropertiesOrDefault(control).IncludeHiddenInLayout;
         public void Setlay_IncludeHiddenInLayout(Control control, bool include)
         {
             StackProperties props = GetOrCreateProperties(control);

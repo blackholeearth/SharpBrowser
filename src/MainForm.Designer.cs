@@ -203,11 +203,12 @@ namespace SharpBrowser
             lbl_ZoomLevel.AutoSize = true;
             lbl_ZoomLevel.FlatStyle = FlatStyle.Flat;
             PanelToolbar.Setlay_FloatAlignment(lbl_ZoomLevel, SharpBrowser.Controls.FloatAlignment.ToRightOf);
-            PanelToolbar.Setlay_FloatOffsetX(lbl_ZoomLevel, -65);
+            PanelToolbar.Setlay_FloatOffsetX(lbl_ZoomLevel, -53);
             PanelToolbar.Setlay_FloatOffsetY(lbl_ZoomLevel, 7);
             PanelToolbar.Setlay_FloatTargetName(lbl_ZoomLevel, "TxtURL");
+            PanelToolbar.Setlay_FloatZOrder(lbl_ZoomLevel, SharpBrowser.Controls.StackFloatZOrder.Manual);
             PanelToolbar.Setlay_IsFloating(lbl_ZoomLevel, true);
-            lbl_ZoomLevel.Location = new System.Drawing.Point(695, 22);
+            lbl_ZoomLevel.Location = new System.Drawing.Point(707, 22);
             lbl_ZoomLevel.Name = "lbl_ZoomLevel";
             lbl_ZoomLevel.Size = new System.Drawing.Size(42, 20);
             lbl_ZoomLevel.TabIndex = 9;
