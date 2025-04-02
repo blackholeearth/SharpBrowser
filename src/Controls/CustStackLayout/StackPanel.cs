@@ -128,7 +128,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
         // --- Private Fields (Layout Properties) ---
         private int _spacing = 3;
         private StackOrientation _orientation = StackOrientation.Vertical;
-        private StackChildAxisAlignment _childAxisAlignment = StackChildAxisAlignment.Stretch;
+        private StackChildAxisAlignment _childAxisAlignment = StackChildAxisAlignment.Center;
         private int _performLayout_calcMethod_No = 0; // Default
 
         private IComponentChangeService _componentChangeService = null;
@@ -810,8 +810,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                     floater.SetBounds(finalX, finalY, floater.Width, floater.Height, BoundsSpecified.Location);
 
                     // --- Apply Z-Order ---
-                    // ... (Z-order logic remains the same) ...
-                    // .... where is the codee ???? ...... attention please...!!!
+                    Apply_ZOrder(floater, zOrderMode, targetControl);
 
                     LayoutLogger.Log($"  Z-Order Prep: Floater='{floater.Name}', Target='{targetControl?.Name ?? "null"}', Mode={zOrderMode}");
                     try { /* Z-Order logic using zOrderMode, targetControl, floater, this.Controls */ }

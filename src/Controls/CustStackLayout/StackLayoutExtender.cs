@@ -22,8 +22,6 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         public StackFloatZOrder FloatZOrder { get; set; } = StackFloatZOrder.InFrontOfTarget;
         public bool IncludeHiddenInLayout { get; set; } = false;
 
-        // Optional: Define constants for defaults
-        public const int DefaultWeight = 0;
         // ... other defaults
 
         // Static instance holding default values (for GetPropertiesOrDefault)
