@@ -1,10 +1,13 @@
-﻿using System;
+﻿using SharpBrowser;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.Design;
 using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 
 namespace SharpBrowser.Controls // Ensure this namespace matches your project
@@ -33,6 +36,25 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
     }
 
     /// <summary>
+    /// Defines how the StackLayout panel adjusts its own size based on content or parent.
+    /// </summary>
+    public enum StackAutoSizeMode
+    {
+        /// <summary>
+        /// The panel's size is determined manually (e.g., by setting Width/Height, Dock, Anchor) or by the designer. (Default)
+        /// </summary>
+        Manual,
+        /// <summary>
+        /// The panel adjusts its size in the relevant dimension (Width or Height) to exactly fit its contained children, including padding.
+        /// </summary>
+        WrapContent,
+        /// <summary>
+        /// The panel adjusts its size in the relevant dimension (Width or Height) to match the client size of its direct parent container. Behaves like Dock.Fill for that dimension.
+        /// </summary>
+        MatchParent
+    }
+
+    /// <summary>
     /// Specifies how a floating control is initially positioned relative to its target before offsets are applied.
     /// </summary>
     public enum FloatAlignment
@@ -55,6 +77,8 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
         Manual
     }
 
+
+
     #endregion
 
 
@@ -67,57 +91,57 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
     {
 
         // --- Add a Timer for Throttling Layout ---
-        private Timer _layoutThrottleTimer;
+        //private Timer _layoutThrottleTimer;
         private Control _pendingLayoutChildControl = null; // Track which child triggered layout
         void init_ThrottleTimer()
         {
-            // --- Initialize the throttle timer ---
-            _layoutThrottleTimer = new Timer();
-            _layoutThrottleTimer.Interval = 200; // 50 milliseconds throttle delay (adjust as needed)
-            _layoutThrottleTimer.Tick += OnLayoutThrottleTimerTick;
-            _layoutThrottleTimer.Enabled = false; // Start disabled
+            //// --- Initialize the throttle timer ---
+            //_layoutThrottleTimer = new Timer();
+            //_layoutThrottleTimer.Interval = 200; // 50 milliseconds throttle delay (adjust as needed)
+            //_layoutThrottleTimer.Tick += OnLayoutThrottleTimerTick;
+            //_layoutThrottleTimer.Enabled = false; // Start disabled
         }
-        void dispose_ThrottleTimer() 
+        void dispose_ThrottleTimer()
         {
-            // --- Dispose of the timer ---
-            if (_layoutThrottleTimer != null)
-            {
-                _layoutThrottleTimer.Stop(); // Ensure timer is stopped
-                _layoutThrottleTimer.Dispose();
-                _layoutThrottleTimer = null;
-                LayoutLogger.Log($"StackLayout [{this.Name}]: Disposed Layout Throttle Timer.");
-            }
+            //// --- Dispose of the timer ---
+            //if (_layoutThrottleTimer != null)
+            //{
+            //    _layoutThrottleTimer.Stop(); // Ensure timer is stopped
+            //    _layoutThrottleTimer.Dispose();
+            //    _layoutThrottleTimer = null;
+            //    LayoutLogger.Log($"StackLayout [{this.Name}]: Disposed Layout Throttle Timer.");
+            //}
         }
         /// <summary>
         /// Timer Tick event handler. Executes PerformLayout after the throttle delay.
         /// </summary>
-        private void OnLayoutThrottleTimerTick(object sender, EventArgs e)
-        {
-            _layoutThrottleTimer.Enabled = false; // Disable timer immediately
+        //private void OnLayoutThrottleTimerTick(object sender, EventArgs e)
+        //{
+        //    _layoutThrottleTimer.Enabled = false; // Disable timer immediately
 
-            Control child = _pendingLayoutChildControl; // Get the stored child
-            _pendingLayoutChildControl = null;       // Clear it
+        //    Control child = _pendingLayoutChildControl; // Get the stored child
+        //    _pendingLayoutChildControl = null;       // Clear it
 
-            // --- Double-check control state *again* before layout ---
-            // (Crucial as events are async, state might have changed in the delay)
-            if (this.IsDisposed || child == null || child.IsDisposed || child.Parent != this)
-            {
-                LayoutLogger.Log($"StackLayout [{this.Name}]: OnLayoutThrottleTimerTick - Aborting layout (Disposed or child state changed for '{child?.Name ?? "null"}').");
-                return; // Abort if state invalid
-            }
+        //    // --- Double-check control state *again* before layout ---
+        //    // (Crucial as events are async, state might have changed in the delay)
+        //    if (this.IsDisposed || child == null || child.IsDisposed || child.Parent != this)
+        //    {
+        //        LayoutLogger.Log($"StackLayout [{this.Name}]: OnLayoutThrottleTimerTick - Aborting layout (Disposed or child state changed for '{child?.Name ?? "null"}').");
+        //        return; // Abort if state invalid
+        //    }
 
-            LayoutLogger.Log($"StackLayout [{this.Name}]: OnLayoutThrottleTimerTick - Throttled delay finished. Performing layout for '{child.Name}'.");
-            try
-            {
-                this.PerformLayout();
-                // Invalidate might be needed if visibility changes affect clipping or overlap
-                // this.Invalidate(true);
-            }
-            catch (Exception ex)
-            {
-                LayoutLogger.Log($"StackLayout ERROR [{this.Name}]: Exception during throttled PerformLayout in OnLayoutThrottleTimerTick for '{child.Name}': {ex.Message}\n{ex.StackTrace}");
-            }
-        }
+        //    LayoutLogger.Log($"StackLayout [{this.Name}]: OnLayoutThrottleTimerTick - Throttled delay finished. Performing layout for '{child.Name}'.");
+        //    try
+        //    {
+        //        this.PerformLayout();
+        //        // Invalidate might be needed if visibility changes affect clipping or overlap
+        //        // this.Invalidate(true);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        LayoutLogger.Log($"StackLayout ERROR [{this.Name}]: Exception during throttled PerformLayout in OnLayoutThrottleTimerTick for '{child.Name}': {ex.Message}\n{ex.StackTrace}");
+        //    }
+        //}
 
 
 
@@ -133,8 +157,14 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
 
         private IComponentChangeService _componentChangeService = null;
         private bool _isPerformingLayout = false;
+        private bool _isPerformingLayoutAutoSize = false; // <<< NEW: Recursion guard for custom AutoSize
 
-        
+        // --- NEW AutoSize Mode Fields ---
+        private StackAutoSizeMode _heightAutoSizeMode = StackAutoSizeMode.Manual;
+        private StackAutoSizeMode _widthAutoSizeMode = StackAutoSizeMode.Manual;
+
+
+
         // NOTE: Hashtables for extender properties are defined in StackLayout.Extender.cs
 
         #region Public Layout Properties (Prefixed and Categorized)
@@ -207,6 +237,45 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             }
         }
 
+
+        [DefaultValue(StackAutoSizeMode.Manual)]
+        [Category(categorySTR)]
+        [Description("Defines how the panel's Height is automatically adjusted. \r\nManual: No change. \r\nWrapContent: Fit children vertically. \r\nMatchParent: Match parent's client height. Note: May conflict with Dock/Anchor settings.")]
+        public StackAutoSizeMode lay_AutoHeight
+        {
+            get => _heightAutoSizeMode;
+            set
+            {
+                if (_heightAutoSizeMode != value)
+                {
+                    _heightAutoSizeMode = value;
+                    // Trigger layout if changing TO an auto mode, as behavior needs to apply
+                    LayoutLogger.Log($"StackLayout [{this.Name}]: Set lay_Height_AutoSizeMode to {value}. Triggering PerformLayout.");
+                    PerformLayout();
+                    Invalidate(); // In case size change affects appearance
+                }
+            }
+        }
+
+        [DefaultValue(StackAutoSizeMode.Manual)]
+        [Category(categorySTR)]
+        [Description("Defines how the panel's Width is automatically adjusted. \r\nManual: No change. \r\nWrapContent: Fit children horizontally. \r\nMatchParent: Match parent's client width. Note: May conflict with Dock/Anchor settings.")]
+        public StackAutoSizeMode lay_AutoWidth
+        {
+            get => _widthAutoSizeMode;
+            set
+            {
+                if (_widthAutoSizeMode != value)
+                {
+                    _widthAutoSizeMode = value;
+                    // Trigger layout if changing TO an auto mode
+                    LayoutLogger.Log($"StackLayout [{this.Name}]: Set lay_Width_AutoSizeMode to {value}. Triggering PerformLayout.");
+                    PerformLayout();
+                    Invalidate();
+                }
+            }
+        }
+
         // --- Standard Properties (Made Visible & Categorized) ---
         [Category(categorySTR)]
         [EditorBrowsable(EditorBrowsableState.Always)]
@@ -239,7 +308,28 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 }
             }
         }
+        [Category(categorySTR)]
+        [EditorBrowsable(EditorBrowsableState.Always)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
+        public new Padding Padding
+        {
+            get => base.Padding;
+            set
+            {
+                if (base.Padding != value)
+                {
+                    base.Padding = value;
+                    // No PerformLayout() needed here, framework handles Anchor/Dock layout
+                     
+                }
+            }
+        }
+        
+         
 
+
+        Throttler throttler1 = new();
+        Debouncer debouncer1 = new();
         #endregion
 
         // --- Constructor ---
@@ -252,7 +342,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
         }
 
         // --- Core Layout Logic Switch ---
-        protected override void OnLayout(LayoutEventArgs levent)
+        private void onLayout_func(LayoutEventArgs levent)
         {
             // Optimization: Don't layout if invisible or disposing
             if (!this.Visible || this.IsDisposed || this.Disposing)
@@ -277,6 +367,30 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             sw1.Stop();
             LayoutLogger.Log($" ------- PerformStackLayout_v{lay_PerformLayout_calcMethod_No} ------- completed :{sw1.ElapsedMilliseconds} ms.");
         }
+
+        protected override void OnLayout(LayoutEventArgs levent)
+        {
+            onLayout_func(levent);
+        }
+
+        private void PerformLayout_ratelimited(int interval=150, bool invalidateTRUE=false , [CallerMemberName] string caller = "")
+        {
+            LayoutLogger.Log($"PerformLayout_ratelimited -- rate_Limited - caller: {caller} ");
+
+            //throttler1.Throttle(interval, delegate
+            debouncer1.Debounce(interval, delegate
+            {
+                this.PerformLayout();
+                if (invalidateTRUE)
+                    Invalidate(true);
+
+                LayoutLogger.Log($"PerformLayout_ratelimited -- ****Executed - caller: {caller} ");
+
+            });
+        }
+
+
+
 
         #region Layout Method 0 (Flexible Designer Mode) and Helpers
         /// <summary>
@@ -330,7 +444,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 // Dictionaries are now populated by the helper method
 
                 // *** CALL POSITIONING LOOP HELPER WITH 'ref' for iterative updates ***
-                int contentEndPos = PL_p32__Position_FLOW_Controls_Loop(
+                int contentEndPos = PL_p3a__Position_FLOW_Controls_Loop(
                     flowControls,
                     displayRect,
                     weights,             // Pass populated dictionary (read-only in helper)
@@ -347,6 +461,9 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                     displayRect,
                     flowControlLocations // Pass populated dictionary (read-only in helper)
                  );
+
+                // *** APPLY AUTO SIZING *** <<< NEW CALL
+                PL_p6__Apply_Panel_AutoSize();
 
                 // *** CALL AUTOSCROLL HELPER (Pass calculated values) ***
                 PL_p5__Calculate_AutoScrollMinSize_based_on_FLOW_controls(
@@ -446,15 +563,15 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                         {
                             case StackFloatZOrder.InFrontOfTarget:
                                 if (this.Controls.GetChildIndex(floater) != this.Controls.Count - 1) floater.BringToFront();
-                                LayoutLogger.Log($"  Floater '{floater.Name}' (untargeted): Brought to Front (Mode: {zOrderMode})");
+                                //LayoutLogger.Log($"  Floater '{floater.Name}' (untargeted): Brought to Front (Mode: {zOrderMode})");
                                 break;
                             case StackFloatZOrder.BehindTarget:
                                 if (this.Controls.GetChildIndex(floater) != 0) floater.SendToBack();
-                                LayoutLogger.Log($"  Floater '{floater.Name}' (untargeted): Sent to Back (Mode: {zOrderMode})");
+                                //LayoutLogger.Log($"  Floater '{floater.Name}' (untargeted): Sent to Back (Mode: {zOrderMode})");
                                 break;
                             case StackFloatZOrder.Manual:
                             default:
-                                LayoutLogger.Log($"  Floater '{floater.Name}' (untargeted): Z-Order unchanged (Mode: {zOrderMode})");
+                                //LayoutLogger.Log($"  Floater '{floater.Name}' (untargeted): Z-Order unchanged (Mode: {zOrderMode})");
                                 break;
                         }
                     }
@@ -465,8 +582,10 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 }
             }
             // Reset AutoScroll size if no flow content
-            if (AutoScroll) { AutoScrollMinSize = Size.Empty; } else { AutoScrollMinSize = Size.Empty; }
-            LayoutLogger.Log("Setting AutoScrollMinSize to Empty (No Flow Controls).");
+            if (AutoScroll) 
+            { AutoScrollMinSize = Size.Empty; } 
+            else { AutoScrollMinSize = Size.Empty; }
+            //LayoutLogger.Log("Setting AutoScrollMinSize to Empty (No Flow Controls).");
 
             // IMPORTANT: Resetting the flag here for this specific early-exit path, as per prior logic.
             // Be cautious if modifying this; normally reset only happens in the finally block.
@@ -581,7 +700,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
         /// Updates currentPos and maxCrossAxisSize iteratively using 'ref'. Populates flowControlLocations.
         /// </summary>
         /// <returns>The position after the last flow control (including spacing).</returns>
-        private int PL_p32__Position_FLOW_Controls_Loop(
+        private int PL_p3a__Position_FLOW_Controls_Loop(
            List<Control> flowControls,
            Rectangle displayRect,
            Dictionary<Control, int> weights,
@@ -786,7 +905,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                     if (targetControl != null && flowControlLocations.ContainsKey(targetName)) // Target FOUND
                     {
                         // ... (Calculation logic using targetPos from flowControlLocations dictionary remains the same) ...
-                        LayoutLogger.Log($"  Floater '{floater.Name}' -> Target '{targetName}' FOUND.");
+                        //LayoutLogger.Log($"  Floater '{floater.Name}' -> Target '{targetName}' FOUND.");
                         Point targetPos = flowControlLocations[targetName];
                         switch (alignment)
                         { /* Cases as before */
@@ -797,14 +916,14 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                             case FloatAlignment.TopLeft: default: baseX = targetPos.X; baseY = targetPos.Y; break;
                         }
                         finalX = baseX + offsetX; finalY = baseY + offsetY;
-                        LayoutLogger.Log($"    Mode: {alignment}, Base=({baseX},{baseY}), Offsets=({offsetX},{offsetY}), Final=({finalX},{finalY})");
+                        //LayoutLogger.Log($"    Mode: {alignment}, Base=({baseX},{baseY}), Offsets=({offsetX},{offsetY}), Final=({finalX},{finalY})");
                     }
                     else // Target NOT found or not specified - Fallback
                     {
                         // ... (Fallback logic remains the same) ...
                         baseX = displayRect.Left; baseY = displayRect.Top; finalX = baseX + offsetX; finalY = baseY + offsetY;
-                        if (!string.IsNullOrEmpty(targetName)) LayoutLogger.Log($"  Floater '{floater.Name}' -> Target '{targetName}' NOT FOUND/Invalid. Fallback Pos: ({finalX},{finalY})");
-                        else LayoutLogger.Log($"  Floater '{floater.Name}' -> No Target Name. Fallback Pos: ({finalX},{finalY})");
+                        if (!string.IsNullOrEmpty(targetName))  LayoutLogger.Log($"  Floater '{floater.Name}' -> Target '{targetName}' NOT FOUND/Invalid. Fallback Pos: ({finalX},{finalY})");
+                        //else  LayoutLogger.Log($"  Floater '{floater.Name}' -> No Target Name. Fallback Pos: ({finalX},{finalY})");
                         targetControl = null;
                     }
 
@@ -812,9 +931,9 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                     floater.SetBounds(finalX, finalY, floater.Width, floater.Height, BoundsSpecified.Location);
 
                     // --- Apply Z-Order ---
-                    Apply_ZOrder(floater, zOrderMode, targetControl);
+                    PL_p4a_Apply_ZOrder(floater, zOrderMode, targetControl);
 
-                    LayoutLogger.Log($"  Z-Order Prep: Floater='{floater.Name}', Target='{targetControl?.Name ?? "null"}', Mode={zOrderMode}");
+                    //LayoutLogger.Log($"  Z-Order Prep: Floater='{floater.Name}', Target='{targetControl?.Name ?? "null"}', Mode={zOrderMode}");
                     try { /* Z-Order logic using zOrderMode, targetControl, floater, this.Controls */ }
                     catch (Exception zEx) { LayoutLogger.Log($"    ERROR setting Z-Index for {floater.Name} (Mode: {zOrderMode}): {zEx.Message}."); }
                 } // End foreach floater
@@ -822,7 +941,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             }
         }
 
-        private void Apply_ZOrder(Control floater, StackFloatZOrder zOrderMode, Control targetControl)
+        private void PL_p4a_Apply_ZOrder(Control floater, StackFloatZOrder zOrderMode, Control targetControl)
         {
             try
             {
@@ -927,6 +1046,147 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             }
         }
 
+        /// <summary>
+        /// Phase 6 (v0/v4): Adjusts the StackLayout's own Width and/or Height based on
+        /// lay_Width_AutoSizeMode and lay_Height_AutoSizeMode settings, after children
+        /// have been positioned by previous phases.
+        /// </summary>
+        private void PL_p6__Apply_Panel_AutoSize()
+        {
+            // --- Guard Clauses ---
+            if (_isPerformingLayoutAutoSize)
+            {
+                LayoutLogger.Log($"StackLayout [{this.Name}]: PL_p6 SKIPPED (AutoSize Recursion Guard).");
+                return; // Prevent recursion if setting Size triggers layout again
+            }
+            if (lay_AutoHeight == StackAutoSizeMode.Manual && lay_AutoWidth == StackAutoSizeMode.Manual)
+            {
+                //LayoutLogger.Log($"StackLayout [{this.Name}]: PL_p6 SKIPPED (Modes are Manual).");
+                return; // Nothing to do
+            }
+            if ((lay_AutoHeight == StackAutoSizeMode.MatchParent || lay_AutoWidth == StackAutoSizeMode.MatchParent) && this.Parent == null)
+            {
+                LayoutLogger.Log($"StackLayout [{this.Name}]: PL_p6 SKIPPED (MatchParent requires Parent).");
+                return; // MatchParent needs a parent
+            }
+
+            // WARNING: This custom auto-sizing might conflict with standard Dock and Anchor properties.
+            // Standard AutoSize=true integrates better with Dock/Anchor. This approach directly sets
+            // the Size, which might be immediately overridden by framework layout logic for Dock/Anchor.
+            LayoutLogger.Log($"StackLayout [{this.Name}]: ---> Starting PL_p6__Apply_Panel_AutoSize (H:{lay_AutoHeight}, W:{lay_AutoWidth})");
+
+
+            int currentWidth = this.Width;
+            int currentHeight = this.Height;
+            int targetWidth = currentWidth;
+            int targetHeight = currentHeight;
+
+            // --- Calculate Required Size for WrapContent ---
+            int wrapWidth = 0;
+            int wrapHeight = 0;
+            if (lay_AutoWidth == StackAutoSizeMode.WrapContent || lay_AutoHeight == StackAutoSizeMode.WrapContent)
+            {
+                int minX = int.MaxValue, minY = int.MaxValue, maxX = int.MinValue, maxY = int.MinValue;
+                bool hasVisibleChild = false;
+
+                // Iterate through ALL controls positioned by layout (including floaters)
+                // Consider only controls currently managed by this panel
+                foreach (Control child in this.Controls.OfType<Control>())
+                {
+                    // Check if the control was considered in the layout (visible or includeHidden)
+                    // Using child.Bounds assumes PL_p32/PL_p4 have just set them correctly
+                    // Need a reliable way to know which controls were *actually* positioned.
+                    // Re-using the separation logic might be safer if complex scenarios arise.
+                    // Let's assume for now that checking Visible is sufficient AFTER layout ran.
+                    // Note: If IncludeHiddenInLayout is used, those hidden controls *will* affect bounds.
+                    StackProperties props = GetPropertiesOrDefault(child); // From extender
+                    if (child.Visible || props.IncludeHiddenInLayout) // Consider controls that occupy space
+                    {
+                        if (child.Left < minX) minX = child.Left;
+                        if (child.Top < minY) minY = child.Top;
+                        if (child.Right > maxX) maxX = child.Right;
+                        if (child.Bottom > maxY) maxY = child.Bottom;
+                        hasVisibleChild = true;
+                    }
+                }
+
+                if (hasVisibleChild)
+                {
+                    // Calculate content size based on the bounding box of children
+                    int requiredContentWidth = maxX - minX;
+                    int requiredContentHeight = maxY - minY;
+
+                    // Add panel padding
+                    wrapWidth = requiredContentWidth + this.Padding.Horizontal;
+                    wrapHeight = requiredContentHeight + this.Padding.Vertical;
+                    //LayoutLogger.Log($"  WrapContent Calc: Bounds=({minX},{minY})-({maxX},{maxY}), Content=({requiredContentWidth}x{requiredContentHeight}), WithPadding=({wrapWidth}x{wrapHeight})");
+                }
+                else
+                {
+                    // No visible children, size should be just padding
+                    wrapWidth = this.Padding.Horizontal;
+                    wrapHeight = this.Padding.Vertical;
+                    //LayoutLogger.Log($"  WrapContent Calc: No visible children, Size=Padding=({wrapWidth}x{wrapHeight})");
+                }
+            }
+
+            // --- Calculate Required Size for MatchParent ---
+            int matchWidth = 0;
+            int matchHeight = 0;
+            if (this.Parent != null && (lay_AutoWidth == StackAutoSizeMode.MatchParent || lay_AutoHeight == StackAutoSizeMode.MatchParent))
+            {
+                Size parentClientSize = this.Parent.ClientSize;
+                matchWidth = parentClientSize.Width;
+                matchHeight = parentClientSize.Height;
+                LayoutLogger.Log($"  MatchParent Calc: ParentClientSize=({matchWidth}x{matchHeight})");
+            }
+
+            // --- Determine Target Dimensions ---
+            if (lay_AutoWidth == StackAutoSizeMode.WrapContent)
+            {
+                targetWidth = Math.Max(0, wrapWidth); // Ensure non-negative
+            }
+            else if (lay_AutoWidth == StackAutoSizeMode.MatchParent && this.Parent != null)
+            {
+                targetWidth = Math.Max(0, matchWidth);
+            }
+            // Else: targetWidth remains currentWidth (Manual mode)
+
+            if (lay_AutoHeight == StackAutoSizeMode.WrapContent)
+            {
+                targetHeight = Math.Max(0, wrapHeight);
+            }
+            else if (lay_AutoHeight == StackAutoSizeMode.MatchParent && this.Parent != null)
+            {
+                targetHeight = Math.Max(0, matchHeight);
+            }
+            // Else: targetHeight remains currentHeight (Manual mode)
+
+            LayoutLogger.Log($"  Determined Target Size: ({targetWidth}x{targetHeight})");
+
+            // --- Apply Size Change if Needed ---
+            if (targetWidth != currentWidth || targetHeight != currentHeight)
+            {
+                LayoutLogger.Log($"  Applying Size Change from ({currentWidth}x{currentHeight}) to ({targetWidth}x{targetHeight})");
+                _isPerformingLayoutAutoSize = true; // Set recursion guard
+                try
+                {
+                    this.Size = new Size(targetWidth, targetHeight);
+                    // Note: This Size change might trigger OnSizeChanged -> PerformLayout again,
+                    // but the main _isPerformingLayout flag should prevent full re-layout.
+                    // The _isPerformingLayoutAutoSize prevents this specific method from recursing directly.
+                }
+                catch (Exception ex)
+                {
+                    LayoutLogger.Log($"ERROR during Size set in PL_p6: {ex.Message}");
+                }
+                finally
+                {
+                    _isPerformingLayoutAutoSize = false; // Clear recursion guard
+                }
+            }
+            LayoutLogger.Log($"StackLayout [{this.Name}]: <--- Finished PL_p6__Apply_Panel_AutoSize");
+        }
 
         #endregion
 
@@ -978,7 +1238,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 // weights and calculatedExpanderSizes dictionaries are now populated
 
                 // *** CALL POSITIONING LOOP HELPER WITH 'ref' for iterative updates ***
-                int contentEndPos = PL_p32__Position_FLOW_Controls_Loop(
+                int contentEndPos = PL_p3a__Position_FLOW_Controls_Loop(
                     flowControls,
                     displayRect,
                     weights,                     // Pass populated dictionary
@@ -995,6 +1255,9 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                     displayRect,
                     flowControlLocations         // Pass populated dictionary
                  );
+
+                // *** APPLY AUTO SIZING *** <<< NEW CALL
+                PL_p6__Apply_Panel_AutoSize();
 
                 // *** CALL AUTOSCROLL HELPER (Pass calculated values) ***
                 PL_p5__Calculate_AutoScrollMinSize_based_on_FLOW_controls(
@@ -1125,9 +1388,10 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
 
             // Adding/removing controls inherently requires relayout
             LayoutLogger.Log($"StackLayout [{this.Name}]: OnControlAdded TRIGGERING PerformLayout for '{e.Control?.Name ?? "null"}'.");
-            
-            PerformLayout();
-            Invalidate(true); // Ensure repaint
+
+            PerformLayout_ratelimited(100,invalidateTRUE: true);
+            //PerformLayout();
+            //Invalidate(true); // Ensure repaint
             LayoutLogger.Log($"StackLayout [{this.Name}]: OnControlAdded - PerformLayout call COMPLETED.");
         }
 
@@ -1158,8 +1422,9 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             }
             // Removing controls inherently requires relayout
             LayoutLogger.Log($"StackLayout [{this.Name}]: OnControlRemoved TRIGGERING PerformLayout for '{e.Control?.Name ?? "null"}'.");
-            PerformLayout();
-            Invalidate(true);
+            PerformLayout_ratelimited( invalidateTRUE: true);
+            //PerformLayout();
+            //Invalidate(true);
             LayoutLogger.Log($"StackLayout [{this.Name}]: OnControlRemoved - PerformLayout call COMPLETED.");
         }
 
@@ -1174,8 +1439,11 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
 
             if (child != null && child.Parent == this && !this.IsDisposed && !child.IsDisposed)
             {
-                _pendingLayoutChildControl = child; // Store the child that triggered the layout
-                _layoutThrottleTimer.Enabled = true; // Enable/restart the timer
+                PerformLayout_ratelimited();
+                //this.PerformLayout();
+                //_pendingLayoutChildControl = child; // Store the child that triggered the layout
+                //_layoutThrottleTimer.Enabled = true; // Enable/restart the timer
+
             }
             else if (child != null && child.Parent != this)
             {
@@ -1261,7 +1529,9 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
         {
             LayoutLogger.Log($"StackLayout [{this.Name}]: OnPaddingChanged FIRED.");
             base.OnPaddingChanged(e);
-            PerformLayout(); // Padding affects DisplayRectangle
+
+            //this.PerformLayout();
+            PerformLayout_ratelimited();
         }
 
         protected override void OnSizeChanged(EventArgs e)
@@ -1274,7 +1544,8 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             base.OnSizeChanged(e);
 
             //PerformLayout();
-            _layoutThrottleTimer.Enabled = true;
+            PerformLayout_ratelimited();
+            //_layoutThrottleTimer.Enabled = true;
         }
 
         protected override void OnVisibleChanged(EventArgs e)
@@ -1284,9 +1555,9 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             // Layout might be needed when becoming visible if content changed while hidden
             if (this.Visible)
             {
-                _layoutThrottleTimer.Enabled = true;
-                //PerformLayout();
-                //Invalidate();
+                //_layoutThrottleTimer.Enabled = true;
+                PerformLayout();
+                Invalidate();
             }
         }
 
@@ -1388,8 +1659,12 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                             //this.Invalidate(true); // Repaint might be needed
                             //LayoutLogger.Log($"StackLayout [{this.Name}]: OnComponentChanged - Direct PerformLayout call COMPLETED.");
                             LayoutLogger.Log($"StackLayout [{this.Name}]: OnComponentChanged - throttled PerformLayout call COMPLETED.");
-                            _layoutThrottleTimer.Enabled = true;
-                            
+
+                            PerformLayout_ratelimited(invalidateTRUE:true);
+                            //PerformLayout();
+                            //_layoutThrottleTimer.Enabled = true;
+
+
                         }
                         catch (Exception ex)
                         {
@@ -1448,47 +1723,13 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 //// Clear the Hashtables (defined in the other partial file, but accessible)
                 _lay_properties?.Clear();
 
-                //_lay_expandWeights?.Clear();
-                //_lay_isFloating?.Clear();
-                //_lay_floatTargetNames?.Clear();
-                //_lay_floatOffsetsX?.Clear();
-                //_lay_floatOffsetsY?.Clear();
-                //_lay_floatAlignments?.Clear();
-                //_lay_floatZOrderModes?.Clear();
-                //// --- CLEAR NEW HASHTABLE ---
-                //_lay_includeHiddenInLayout?.Clear();
+ ;
                 LayoutLogger.Log($"StackLayout [{this.Name}]: Cleared extender property Hashtables during Dispose.");
             }
             base.Dispose(disposing);
         }
 
-        //protected override void Dispose(bool disposing)
-        //{
-        //    if (disposing)
-        //    {
-        //        LayoutLogger.Log($"StackLayout [{this.Name}]: Dispose({disposing}) called.");
-
-        //        dispose_ThrottleTimer();
-
-        //        // Unsubscribe logic...
-        //        if (_componentChangeService != null) { /* ... */ }
-        //        foreach (Control c in this.Controls.OfType<Control>()) { /* ... */ }
-
-        //        // Clear the Hashtables
-        //        _expandWeights?.Clear();
-        //        _lay_isFloatingFlags?.Clear();
-        //        _lay_floatTargetNames?.Clear();
-        //        _lay_floatOffsetsX?.Clear();
-        //        _lay_floatOffsetsY?.Clear();
-        //        _lay_floatAlignments?.Clear();
-        //        _lay_floatZOrderModes?.Clear();
-        //        // --- CLEAR NEW HASHTABLE ---
-        //        _lay_includeHiddenInLayout?.Clear();
-
-        //        LayoutLogger.Log($"StackLayout [{this.Name}]: Cleared extender property Hashtables during Dispose.");
-        //    }
-        //    base.Dispose(disposing);
-        //}
+         
 
 
     } // End partial class StackLayout

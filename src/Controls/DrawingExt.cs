@@ -5,6 +5,25 @@ using System.Drawing.Drawing2D;
 namespace System.Drawing
 {
 
+    public static class FormsEx
+    {
+        public static void SetDoubleBuffered(this System.Windows.Forms.Control controlx, bool value=true)
+        {
+            //Taxes: Remote Desktop Connection and painting
+            //http://blogs.msdn.com/oldnewthing/archive/2006/01/03/508694.aspx
+            if (System.Windows.Forms.SystemInformation.TerminalServerSession)
+                return;
+
+            Reflection.PropertyInfo aProp =
+                  typeof(System.Windows.Forms.Control).GetProperty(
+                        "DoubleBuffered",
+                        System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+
+            aProp.SetValue(controlx, value, null);
+        }
+    }
+
     public static partial class GraphicsEx
     {
         /// <summary>
