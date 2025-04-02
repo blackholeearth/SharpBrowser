@@ -42,11 +42,16 @@ namespace SharpBrowser {
 			SetFormTitle(null);
 
             //i dont wanna see gui elements changing -- so moved it here..
-            this.SuspendLayout();
+            this.SetDoubleBuffered();
+            PanelToolbar.SetDoubleBuffered();
+
             PanelToolbar.SuspendLayout();
+            this.SuspendLayout();
             {
                 var txtURL_wrapper1 = TxtURL.MakeTextbox_CustomBorderColor();
 
+                //maybe floaterTarget  canbe child control??
+                //-- it may get rid of this mess
                 var lblZoom_props = PanelToolbar.GetPropertiesOrDefault(lbl_ZoomLevel);
                 lblZoom_props.FloatTargetName = txtURL_wrapper1.Name;
                 var offsetY = (int)(txtURL_wrapper1.Height / 2 - lbl_ZoomLevel.Height / 2);
@@ -65,8 +70,10 @@ namespace SharpBrowser {
                 PanelToolbar.Width = this.Width;
                 PanelToolbar.Width = pnlToolbarOverlay.Width;
             }
-            PanelToolbar.ResumeLayout(true);
-            this.ResumeLayout(true);
+            PanelToolbar.ResumeLayout(false);
+            this.ResumeLayout(false);
+
+            //PanelToolbar.Width -= 30; //debugger helper
 
             if (Debugger.IsAttached)
                 pnlToolbarOverlay.BackColor = Color.Cyan;
@@ -77,17 +84,16 @@ namespace SharpBrowser {
 			InitAppIcon();
 			InitTooltips(this.Controls);
 			InitHotkeys();
+        }
 
-		}
 
+        #region App Icon
 
-		#region App Icon
-
-		/// <summary>
-		/// embedding the resource using the Visual Studio designer results in a blurry icon.
-		/// the best way to get a non-blurry icon for Windows 7 apps.
-		/// </summary>
-		private void InitAppIcon() {
+        /// <summary>
+        /// embedding the resource using the Visual Studio designer results in a blurry icon.
+        /// the best way to get a non-blurry icon for Windows 7 apps.
+        /// </summary>
+        private void InitAppIcon() {
 			assembly = Assembly.GetAssembly(typeof(MainForm));
 			Icon = new Icon(GetResourceStream("sharpbrowser.ico"), new Size(64, 64));
 		}
