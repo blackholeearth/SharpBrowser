@@ -382,10 +382,12 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             // Iterate through ALL controls in the panel
             foreach (Control child in this.Controls.OfType<Control>())
             {
+                StackProperties ch_props = GetPropertiesOrDefault(child); // New helper
+
                 // Determine if the control should participate in layout calculations at all
                 bool isVisible = child.Visible;
                 // Use the new extender property getter via 'this'
-                bool includeWhenHidden = this.Getlay_IncludeHiddenInLayout(child);
+                bool includeWhenHidden = ch_props.IncludeHiddenInLayout;
 
                 // Include if EITHER Visible OR explicitly included while hidden
                 bool shouldIncludeInLayout = isVisible || includeWhenHidden;
@@ -395,7 +397,7 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 if (shouldIncludeInLayout)
                 {
                     // Now check if it's floating or part of the flow
-                    if (this.Getlay_IsFloating(child))
+                    if (ch_props.IsFloating)
                     {
                         floatingControls.Add(child);
                         //LayoutLogger.Log($"    -> Added to Floating Controls.");
@@ -426,10 +428,10 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 LayoutLogger.Log("Positioning floaters relative to Padding.");
                 foreach (Control floater in floatingControls)
                 {
-                    // Calls Getlay_Float... methods via 'this'
-                    int offsetX = this.Getlay_FloatOffsetX(floater);
-                    int offsetY = this.Getlay_FloatOffsetY(floater);
-                    StackFloatZOrder zOrderMode = this.Getlay_FloatZOrder(floater);
+                    StackProperties ch_props = GetPropertiesOrDefault(floater); // New helper
+                    int offsetX = ch_props.FloatOffsetX;
+                    int offsetY = ch_props.FloatOffsetY;
+                    StackFloatZOrder zOrderMode = ch_props.FloatZOrder;
 
                     int fallbackX = displayRect.Left + offsetX;
                     int fallbackY = displayRect.Top + offsetY;
@@ -550,7 +552,9 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                     Control firstExpander = flowControls.FirstOrDefault(c => weights.ContainsKey(c) && weights[c] > 0);
                     if (firstExpander != null)
                     {
-                        if (!extraSpaceMap.ContainsKey(firstExpander)) extraSpaceMap[firstExpander] = 0; // Safety check
+                        if (!extraSpaceMap.ContainsKey(firstExpander)) 
+                            extraSpaceMap[firstExpander] = 0; // Safety check
+
                         extraSpaceMap[firstExpander] += leftoverPixels; // Modify dictionary passed by caller
                         distributedLeftovers = leftoverPixels;
                     }
@@ -602,10 +606,25 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                     {
                         sizeAlongAxis = extraSpaceMapOrCalculatedSize.ContainsKey(child) ? extraSpaceMapOrCalculatedSize[child] : 0;
                         // Apply Min/Max constraints for v4 expanders
-                        if (lay_Orientation == StackOrientation.Vertical) { /* Apply Height Min/Max */ if (child.MaximumSize.Height > 0 && sizeAlongAxis > child.MaximumSize.Height) sizeAlongAxis = child.MaximumSize.Height; if (sizeAlongAxis < child.MinimumSize.Height) sizeAlongAxis = child.MinimumSize.Height; }
-                        else { /* Apply Width Min/Max */ if (child.MaximumSize.Width > 0 && sizeAlongAxis > child.MaximumSize.Width) sizeAlongAxis = child.MaximumSize.Width; if (sizeAlongAxis < child.MinimumSize.Width) sizeAlongAxis = child.MinimumSize.Width; }
+                        if (lay_Orientation == StackOrientation.Vertical) { 
+                            /* Apply Height Min/Max */ 
+                            if (child.MaximumSize.Height > 0 && sizeAlongAxis > child.MaximumSize.Height) 
+                                sizeAlongAxis = child.MaximumSize.Height; 
+                            if (sizeAlongAxis < child.MinimumSize.Height) 
+                                sizeAlongAxis = child.MinimumSize.Height; 
+                        }
+                        else { 
+                            /* Apply Width Min/Max */ 
+                            if (child.MaximumSize.Width > 0 && sizeAlongAxis > child.MaximumSize.Width) 
+                                sizeAlongAxis = child.MaximumSize.Width; 
+                            if (sizeAlongAxis < child.MinimumSize.Width) 
+                                sizeAlongAxis = child.MinimumSize.Width; 
+                        }
                     }
-                    else { /* Non-expander in v4 uses its current size */ sizeAlongAxis = (lay_Orientation == StackOrientation.Vertical) ? child.Height : child.Width; }
+                    else { 
+                        /* Non-expander in v4 uses its current size */ 
+                        sizeAlongAxis = (lay_Orientation == StackOrientation.Vertical) ? child.Height : child.Width; 
+                    }
                 }
                 else // Method 0
                 {
@@ -613,12 +632,23 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                     int extraSpace = extraSpaceMapOrCalculatedSize.ContainsKey(child) ? extraSpaceMapOrCalculatedSize[child] : 0;
                     sizeAlongAxis = initialSizeAlongAxis + extraSpace;
                     // Apply Min/Max constraints for v0 (applies even if weight was 0)
-                    if (lay_Orientation == StackOrientation.Vertical) { /* Apply Height Min/Max */ if (child.MaximumSize.Height > 0 && sizeAlongAxis > child.MaximumSize.Height) sizeAlongAxis = child.MaximumSize.Height; if (sizeAlongAxis < child.MinimumSize.Height) sizeAlongAxis = child.MinimumSize.Height; }
-                    else { /* Apply Width Min/Max */ if (child.MaximumSize.Width > 0 && sizeAlongAxis > child.MaximumSize.Width) sizeAlongAxis = child.MaximumSize.Width; if (sizeAlongAxis < child.MinimumSize.Width) sizeAlongAxis = child.MinimumSize.Width; }
+                    if (lay_Orientation == StackOrientation.Vertical) { 
+                        /* Apply Height Min/Max */ 
+                        if (child.MaximumSize.Height > 0 && sizeAlongAxis > child.MaximumSize.Height)
+                            sizeAlongAxis = child.MaximumSize.Height;
+                        if (sizeAlongAxis < child.MinimumSize.Height) 
+                            sizeAlongAxis = child.MinimumSize.Height;
+                    }
+                    else { 
+                        /* Apply Width Min/Max */ 
+                        if (child.MaximumSize.Width > 0 && sizeAlongAxis > child.MaximumSize.Width) 
+                            sizeAlongAxis = child.MaximumSize.Width;
+                        if (sizeAlongAxis < child.MinimumSize.Width) sizeAlongAxis = child.MinimumSize.Width;
+                    }
                 }
 
 
-                int crossAxisPos; // Position perpendicular to orientation
+                int crossAxisPos;// Position perpendicular to orientation
                 int crossAxisSize; // Size perpendicular to orientation
                 BoundsSpecified boundsSpec = BoundsSpecified.None; // Tracks which bounds are explicitly set
 
@@ -628,10 +658,30 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                     int availableWidth = displayRect.Width; crossAxisPos = displayRect.Left;
                     switch (lay_ChildAxisAlignment)
                     { /* Cases as before */
-                        case StackChildAxisAlignment.Stretch: crossAxisSize = availableWidth; if (child.MaximumSize.Width > 0 && crossAxisSize > child.MaximumSize.Width) crossAxisSize = child.MaximumSize.Width; if (crossAxisSize < child.MinimumSize.Width) crossAxisSize = child.MinimumSize.Width; boundsSpec |= BoundsSpecified.Width; break;
-                        case StackChildAxisAlignment.Center: crossAxisSize = child.Width; crossAxisPos += (availableWidth - crossAxisSize) / 2; if (crossAxisPos < displayRect.Left) crossAxisPos = displayRect.Left; break;
-                        case StackChildAxisAlignment.End: crossAxisSize = child.Width; crossAxisPos += availableWidth - crossAxisSize; if (crossAxisPos < displayRect.Left) crossAxisPos = displayRect.Left; break;
-                        case StackChildAxisAlignment.Start: default: crossAxisSize = child.Width; break;
+                        case StackChildAxisAlignment.Stretch: crossAxisSize = availableWidth;
+                            if (child.MaximumSize.Width > 0 && crossAxisSize > child.MaximumSize.Width) 
+                                crossAxisSize = child.MaximumSize.Width;
+                            if (crossAxisSize < child.MinimumSize.Width) crossAxisSize = child.MinimumSize.Width;
+                            boundsSpec |= BoundsSpecified.Width;
+                            break;
+
+                        case StackChildAxisAlignment.Center: crossAxisSize = child.Width;
+                            crossAxisPos += (availableWidth - crossAxisSize) / 2;
+                            if (crossAxisPos < displayRect.Left) 
+                                crossAxisPos = displayRect.Left;
+                            break;
+
+                        case StackChildAxisAlignment.End: crossAxisSize = child.Width;
+                            crossAxisPos += availableWidth - crossAxisSize;
+                            if (crossAxisPos < displayRect.Left) 
+                                crossAxisPos = displayRect.Left;
+                            break;
+
+                        case StackChildAxisAlignment.Start: 
+                        default: 
+                            crossAxisSize = child.Width;
+                            break;
+
                     }
                     child.SetBounds(crossAxisPos, currentPos, crossAxisSize, sizeAlongAxis, BoundsSpecified.Location | BoundsSpecified.Height | boundsSpec);
                     // Store final location using the current loop position (currentPos for Y)
@@ -646,12 +696,31 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                     int availableHeight = displayRect.Height; crossAxisPos = displayRect.Top;
                     switch (lay_ChildAxisAlignment)
                     { /* Cases as before */
-                        case StackChildAxisAlignment.Stretch: crossAxisSize = availableHeight; if (child.MaximumSize.Height > 0 && crossAxisSize > child.MaximumSize.Height) crossAxisSize = child.MaximumSize.Height; if (crossAxisSize < child.MinimumSize.Height) crossAxisSize = child.MinimumSize.Height; boundsSpec |= BoundsSpecified.Height; break;
-                        case StackChildAxisAlignment.Center: crossAxisSize = child.Height; crossAxisPos += (availableHeight - crossAxisSize) / 2; if (crossAxisPos < displayRect.Top) crossAxisPos = displayRect.Top; break;
-                        case StackChildAxisAlignment.End: crossAxisSize = child.Height; crossAxisPos += availableHeight - crossAxisSize; if (crossAxisPos < displayRect.Top) crossAxisPos = displayRect.Top; break;
-                        case StackChildAxisAlignment.Start: default: crossAxisSize = child.Height; break;
+                        case StackChildAxisAlignment.Stretch: crossAxisSize = availableHeight;
+                            if (child.MaximumSize.Height > 0 && crossAxisSize > child.MaximumSize.Height) 
+                                crossAxisSize = child.MaximumSize.Height;
+                            if (crossAxisSize < child.MinimumSize.Height) crossAxisSize = child.MinimumSize.Height;
+                            boundsSpec |= BoundsSpecified.Height;
+                            break;
+
+                        case StackChildAxisAlignment.Center: crossAxisSize = child.Height;
+                            crossAxisPos += (availableHeight - crossAxisSize) / 2;
+                            if (crossAxisPos < displayRect.Top) crossAxisPos = displayRect.Top;
+                            break;
+
+                        case StackChildAxisAlignment.End: crossAxisSize = child.Height;
+                            crossAxisPos += availableHeight - crossAxisSize;
+                            if (crossAxisPos < displayRect.Top) crossAxisPos = displayRect.Top;
+                            break;
+
+                        case StackChildAxisAlignment.Start: 
+                        default: 
+                            crossAxisSize = child.Height;
+                            break;
+
                     }
                     child.SetBounds(currentPos, crossAxisPos, sizeAlongAxis, crossAxisSize, BoundsSpecified.Location | BoundsSpecified.Width | boundsSpec);
+
                     // Store final location using the current loop position (currentPos for X)
                     if (!string.IsNullOrEmpty(child.Name)) { flowControlLocations[child.Name] = new Point(currentPos, crossAxisPos); }
                     // Update ref parameter
@@ -694,11 +763,12 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 foreach (Control floater in floatingControls)
                 {
                     // Get floating properties via 'this'
-                    string targetName = this.Getlay_FloatTargetName(floater);
-                    int offsetX = this.Getlay_FloatOffsetX(floater);
-                    int offsetY = this.Getlay_FloatOffsetY(floater);
-                    FloatAlignment alignment = this.Getlay_FloatAlignment(floater);
-                    StackFloatZOrder zOrderMode = this.Getlay_FloatZOrder(floater);
+                    var ch_props = GetPropertiesOrDefault(floater);
+                    string targetName = ch_props.FloatTargetName;
+                    int offsetX = ch_props.FloatOffsetX;
+                    int offsetY = ch_props.FloatOffsetY;
+                    FloatAlignment alignment = ch_props.FloatAlignment;
+                    StackFloatZOrder zOrderMode = ch_props.FloatZOrder;
 
                     int baseX = 0, baseY = 0;
                     int finalX, finalY;
@@ -741,6 +811,8 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
 
                     // --- Apply Z-Order ---
                     // ... (Z-order logic remains the same) ...
+                    // .... where is the codee ???? ...... attention please...!!!
+
                     LayoutLogger.Log($"  Z-Order Prep: Floater='{floater.Name}', Target='{targetControl?.Name ?? "null"}', Mode={zOrderMode}");
                     try { /* Z-Order logic using zOrderMode, targetControl, floater, this.Controls */ }
                     catch (Exception zEx) { LayoutLogger.Log($"    ERROR setting Z-Index for {floater.Name} (Mode: {zOrderMode}): {zEx.Message}."); }
@@ -767,8 +839,20 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 int scrollHeight = 0;
 
                 // ... (Calculation logic for scrollWidth/scrollHeight remains the same) ...
-                if (lay_Orientation == StackOrientation.Vertical) { /* Calculate scrollHeight/scrollWidth */ scrollHeight = contentEndPos - displayRect.Top + Padding.Bottom; if (lay_ChildAxisAlignment == StackChildAxisAlignment.Stretch) scrollWidth = 0; else scrollWidth = maxCrossAxisSize + Padding.Left + Padding.Right; }
-                else { /* Calculate scrollWidth/scrollHeight */ scrollWidth = contentEndPos - displayRect.Left + Padding.Right; if (lay_ChildAxisAlignment == StackChildAxisAlignment.Stretch) scrollHeight = 0; else scrollHeight = maxCrossAxisSize + Padding.Top + Padding.Bottom; }
+                if (lay_Orientation == StackOrientation.Vertical) { 
+                    /* Calculate scrollHeight/scrollWidth */ 
+                    scrollHeight = contentEndPos - displayRect.Top + Padding.Bottom;
+                    if (lay_ChildAxisAlignment == StackChildAxisAlignment.Stretch)
+                        scrollWidth = 0;
+                    else scrollWidth = maxCrossAxisSize + Padding.Left + Padding.Right;
+                }
+                else { 
+                    /* Calculate scrollWidth/scrollHeight */ 
+                    scrollWidth = contentEndPos - displayRect.Left + Padding.Right;
+                    if (lay_ChildAxisAlignment == StackChildAxisAlignment.Stretch)
+                        scrollHeight = 0;
+                    else scrollHeight = maxCrossAxisSize + Padding.Top + Padding.Bottom;
+                }
 
                 Size minSize = new Size(scrollWidth, scrollHeight);
                 if (this.AutoScrollMinSize != minSize)
@@ -999,15 +1083,17 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 e.Control.VisibleChanged -= ChildControl_VisibleChanged;
 
                 // Remove extender property values associated with the removed control
-                _lay_expandWeights?.Remove(e.Control);
-                _lay_isFloating?.Remove(e.Control);
-                _lay_floatTargetNames?.Remove(e.Control);
-                _lay_floatOffsetsX?.Remove(e.Control);
-                _lay_floatOffsetsY?.Remove(e.Control);
-                _lay_floatAlignments?.Remove(e.Control);
-                _lay_floatZOrderModes?.Remove(e.Control);
-                // --- REMOVE FROM NEW HASHTABLE ---
-                _lay_includeHiddenInLayout?.Remove(e.Control);
+                _lay_properties?.Remove(e.Control);
+
+                //_lay_expandWeights?.Remove(e.Control);
+                //_lay_isFloating?.Remove(e.Control);
+                //_lay_floatTargetNames?.Remove(e.Control);
+                //_lay_floatOffsetsX?.Remove(e.Control);
+                //_lay_floatOffsetsY?.Remove(e.Control);
+                //_lay_floatAlignments?.Remove(e.Control);
+                //_lay_floatZOrderModes?.Remove(e.Control);
+                //// --- REMOVE FROM NEW HASHTABLE ---
+                //_lay_includeHiddenInLayout?.Remove(e.Control);
 
                 LayoutLogger.Log($"StackLayout [{this.Name}]: Cleared extender properties for removed control '{e.Control.Name}'.");
             }
@@ -1295,16 +1381,18 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
                 }
                 LayoutLogger.Log($"StackLayout [{this.Name}]: Unsubscribed from child VisibleChanged events during Dispose.");
 
-                // Clear the Hashtables (defined in the other partial file, but accessible)
-                _lay_expandWeights?.Clear();
-                _lay_isFloating?.Clear();
-                _lay_floatTargetNames?.Clear();
-                _lay_floatOffsetsX?.Clear();
-                _lay_floatOffsetsY?.Clear();
-                _lay_floatAlignments?.Clear();
-                _lay_floatZOrderModes?.Clear();
-                // --- CLEAR NEW HASHTABLE ---
-                _lay_includeHiddenInLayout?.Clear();
+                //// Clear the Hashtables (defined in the other partial file, but accessible)
+                _lay_properties?.Clear();
+
+                //_lay_expandWeights?.Clear();
+                //_lay_isFloating?.Clear();
+                //_lay_floatTargetNames?.Clear();
+                //_lay_floatOffsetsX?.Clear();
+                //_lay_floatOffsetsY?.Clear();
+                //_lay_floatAlignments?.Clear();
+                //_lay_floatZOrderModes?.Clear();
+                //// --- CLEAR NEW HASHTABLE ---
+                //_lay_includeHiddenInLayout?.Clear();
                 LayoutLogger.Log($"StackLayout [{this.Name}]: Cleared extender property Hashtables during Dispose.");
             }
             base.Dispose(disposing);

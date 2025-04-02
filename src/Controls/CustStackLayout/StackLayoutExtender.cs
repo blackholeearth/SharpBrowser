@@ -8,6 +8,31 @@ using System.Linq; // Optional: If using LayoutLogger inside Setters
 
 namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
 {
+
+    // --- StackProperties Class ---
+    internal class StackProperties
+    {
+        // Define properties with default values
+        public int Weight { get; set; } = 0;
+        public bool IsFloating { get; set; } = false;
+        public string FloatTargetName { get; set; } = "";
+        public int FloatOffsetX { get; set; } = 0;
+        public int FloatOffsetY { get; set; } = 0;
+        public FloatAlignment FloatAlignment { get; set; } = FloatAlignment.TopLeft;
+        public StackFloatZOrder FloatZOrder { get; set; } = StackFloatZOrder.InFrontOfTarget;
+        public bool IncludeHiddenInLayout { get; set; } = false;
+
+        // Optional: Define constants for defaults
+        public const int DefaultWeight = 0;
+        // ... other defaults
+
+        // Static instance holding default values (for GetPropertiesOrDefault)
+        public static readonly StackProperties Defaults = new StackProperties();
+
+        // Constructor could also explicitly set defaults if preferred over initializers
+        // public StackProperties() { Weight = 0; IsFloating = false; ... }
+    }
+
     /// <summary>
     /// Provides extender properties (like lay_ExpandWeight, lay_IsFloating) for controls
     /// contained within a StackLayout panel. This is a partial class definition,
@@ -23,17 +48,20 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
     [ProvideProperty("lay_FloatZOrder", typeof(Control))]
     public partial class StackLayout : IExtenderProvider // Inherits Panel from other file, implements IExtenderProvider here
     {
-        // --- Private Fields (Storage for Provided Properties) ---
-        // These Hashtables store the extender property values associated with each child control.
-        // They are instance members of the StackLayout class.
-        private new Dictionary<Control, int> _lay_expandWeights = new Dictionary<Control, int>();
-        private new Dictionary<Control, bool> _lay_isFloating = new Dictionary<Control, bool>();
-        private new Dictionary<Control, string> _lay_floatTargetNames = new Dictionary<Control, string>();
-        private new Dictionary<Control, int> _lay_floatOffsetsX = new Dictionary<Control, int>();
-        private new Dictionary<Control, int> _lay_floatOffsetsY = new Dictionary<Control, int>();
-        private new Dictionary<Control, FloatAlignment> _lay_floatAlignments = new Dictionary<Control, FloatAlignment>();
-        private new Dictionary<Control, StackFloatZOrder> _lay_floatZOrderModes = new Dictionary<Control, StackFloatZOrder>();
-        private new Dictionary<Control, bool> _lay_includeHiddenInLayout = new Dictionary<Control, bool>();
+
+        private new Dictionary<Control, StackProperties> _lay_properties = new Dictionary<Control, StackProperties>();
+
+        //// --- Private Fields (Storage for Provided Properties) ---
+        //// These Hashtables store the extender property values associated with each child control.
+        //// They are instance members of the StackLayout class.
+        //private new Dictionary<Control, int> _lay_expandWeights = new Dictionary<Control, int>();
+        //private new Dictionary<Control, bool> _lay_isFloating = new Dictionary<Control, bool>();
+        //private new Dictionary<Control, string> _lay_floatTargetNames = new Dictionary<Control, string>();
+        //private new Dictionary<Control, int> _lay_floatOffsetsX = new Dictionary<Control, int>();
+        //private new Dictionary<Control, int> _lay_floatOffsetsY = new Dictionary<Control, int>();
+        //private new Dictionary<Control, FloatAlignment> _lay_floatAlignments = new Dictionary<Control, FloatAlignment>();
+        //private new Dictionary<Control, StackFloatZOrder> _lay_floatZOrderModes = new Dictionary<Control, StackFloatZOrder>();
+        //private new Dictionary<Control, bool> _lay_includeHiddenInLayout = new Dictionary<Control, bool>();
 
         #region IExtenderProvider Implementation
 
@@ -51,25 +79,53 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
 
         #endregion
 
+        // --- Helper Method Implementation ---
+        private StackProperties GetPropertiesOrDefault(Control control)
+        {
+            if (_lay_properties.TryGetValue(control, out StackProperties props))
+            {
+                return props;
+            }
+            // Return a shared, immutable instance containing default values
+            // Avoids creating new objects constantly for controls with no set properties
+            return StackProperties.Defaults;
+        }
+
+        //-- used in Get Set
+        private StackProperties GetOrCreateProperties(Control control)
+        {
+            if (!_lay_properties.TryGetValue(control, out StackProperties props))
+            {
+                props = new StackProperties(); // Assumes StackProperties constructor sets defaults
+                _lay_properties[control] = props;
+            }
+            return props;
+        }
+
         #region Provided Property Getters/Setters
+        private StackProperties Common_GetProp(Control control)
+        {
+            if (_lay_properties.TryGetValue(control, out StackProperties props))
+            {
+                return props;
+            }
+            // Return the default value if no props object exists
+            return StackProperties.Defaults;
+        }
 
         // --- lay_ExpandWeight ---
         [DefaultValue(0)]
         [Description("The weight used to distribute extra space along the orientation axis. 0 = no expansion. Positive values distribute remaining space proportionally.")]
         [Category(categorySTR)] // categorySTR constant is defined in StackLayout.cs
-        public int Getlay_ExpandWeight(Control control)
-        {
-            // Retrieve the value from the Hashtable or return the default (0)
-            return _lay_expandWeights.ContainsKey(control) ? (int)_lay_expandWeights[control] : 0;
-        }
+        public int Getlay_ExpandWeight(Control control) => Common_GetProp(control).Weight;
         public void Setlay_ExpandWeight(Control control, int weight)
         {
             weight = Math.Max(0, weight); // Ensure weight is not negative
-            int currentWeight = Getlay_ExpandWeight(control);
+            StackProperties props = GetOrCreateProperties(control); // Helper needed
 
-            if (currentWeight != weight)
+            if (props.Weight != weight)
             {
-                _lay_expandWeights[control] = weight; // Store the new value
+                props.Weight = weight; // Set value in props object
 
                 // If the control is actually parented by this panel, trigger layout
                 if (control?.Parent == this)
@@ -85,15 +141,15 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [DefaultValue(false)]
         [Category(categorySTR)]
         [Description("If true, the control is positioned relative to a lay_FloatTargetName control instead of being part of the stack flow.")]
-        public bool Getlay_IsFloating(Control control)
-        {
-            return _lay_isFloating.ContainsKey(control) ? (bool)_lay_isFloating[control] : false;
-        }
+        public bool Getlay_IsFloating(Control control) => Common_GetProp(control).IsFloating;
         public void Setlay_IsFloating(Control control, bool isFloating)
         {
-            if (Getlay_IsFloating(control) != isFloating)
+            StackProperties props = GetOrCreateProperties(control);
+
+            if (props.IsFloating != isFloating)
             {
-                _lay_isFloating[control] = isFloating;
+                props.IsFloating = isFloating;
+
                 if (control?.Parent == this)
                 {
                     LayoutLogger.Log($"StackLayout [{this.Name}]: Setlay_IsFloating on '{control.Name}' to {isFloating}. Triggering PerformLayout.");
@@ -108,16 +164,16 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [Category(categorySTR)]
         [Description("The Name of the sibling control this floating control should be positioned relative to.")]
         [TypeConverter(typeof(FloatTargetNameConverter))] // Optional: Add a TypeConverter for dropdown in designer
-        public string Getlay_FloatTargetName(Control control)
-        {
-            return _lay_floatTargetNames.ContainsKey(control) ? (string)_lay_floatTargetNames[control] : "";
-        }
+        public string Getlay_FloatTargetName(Control control) => Common_GetProp(control).FloatTargetName;
         public void Setlay_FloatTargetName(Control control, string targetName)
         {
             targetName = targetName ?? ""; // Normalize null to empty string
-            if (Getlay_FloatTargetName(control) != targetName)
+            StackProperties props = GetOrCreateProperties(control);
+
+            if (props.FloatTargetName != targetName)
             {
-                _lay_floatTargetNames[control] = targetName;
+                props.FloatTargetName = targetName;
+
                 if (control?.Parent == this)
                 {
                     LayoutLogger.Log($"StackLayout [{this.Name}]: Setlay_FloatTargetName on '{control.Name}' to '{targetName}'. Triggering PerformLayout.");
@@ -131,15 +187,15 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [DefaultValue(0)]
         [Category(categorySTR)]
         [Description("The horizontal offset (in pixels) relative to the floating target's alignment point.")]
-        public int Getlay_FloatOffsetX(Control control)
-        {
-            return _lay_floatOffsetsX.ContainsKey(control) ? (int)_lay_floatOffsetsX[control] : 0;
-        }
+        public int Getlay_FloatOffsetX(Control control) => Common_GetProp(control).FloatOffsetX;
         public void Setlay_FloatOffsetX(Control control, int offsetX)
         {
-            if (Getlay_FloatOffsetX(control) != offsetX)
+            StackProperties props = GetOrCreateProperties(control);
+
+            if (props.FloatOffsetX != offsetX)
             {
-                _lay_floatOffsetsX[control] = offsetX;
+                props.FloatOffsetX = offsetX;
+
                 if (control?.Parent == this)
                 {
                     LayoutLogger.Log($"StackLayout [{this.Name}]: Setlay_FloatOffsetX on '{control.Name}' to {offsetX}. Triggering PerformLayout.");
@@ -153,15 +209,15 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [DefaultValue(0)]
         [Category(categorySTR)]
         [Description("The vertical offset (in pixels) relative to the floating target's alignment point.")]
-        public int Getlay_FloatOffsetY(Control control)
-        {
-            return _lay_floatOffsetsY.ContainsKey(control) ? (int)_lay_floatOffsetsY[control] : 0;
-        }
+        public int Getlay_FloatOffsetY(Control control) => Common_GetProp(control).FloatOffsetY;
         public void Setlay_FloatOffsetY(Control control, int offsetY)
         {
-            if (Getlay_FloatOffsetY(control) != offsetY)
+            StackProperties props = GetOrCreateProperties(control);
+
+            if (props.FloatOffsetY != offsetY)
             {
-                _lay_floatOffsetsY[control] = offsetY;
+                props.FloatOffsetY = offsetY;
+
                 if (control?.Parent == this)
                 {
                     LayoutLogger.Log($"StackLayout [{this.Name}]: Setlay_FloatOffsetY on '{control.Name}' to {offsetY}. Triggering PerformLayout.");
@@ -175,15 +231,15 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [DefaultValue(FloatAlignment.TopLeft)]
         [Category(categorySTR)]
         [Description("Specifies how the floating control is initially positioned relative to its target before offsets are applied.")]
-        public FloatAlignment Getlay_FloatAlignment(Control control)
-        {
-            return _lay_floatAlignments.ContainsKey(control) ? (FloatAlignment)_lay_floatAlignments[control] : FloatAlignment.TopLeft;
-        }
+        public FloatAlignment Getlay_FloatAlignment(Control control) => Common_GetProp(control).FloatAlignment;
         public void Setlay_FloatAlignment(Control control, FloatAlignment alignment)
         {
-            if (Getlay_FloatAlignment(control) != alignment)
+            StackProperties props = GetOrCreateProperties(control);
+
+            if (props.FloatAlignment != alignment)
             {
-                _lay_floatAlignments[control] = alignment;
+                props.FloatAlignment = alignment;
+
                 if (control?.Parent == this)
                 {
                     LayoutLogger.Log($"StackLayout [{this.Name}]: Setlay_FloatAlignment on '{control.Name}' to {alignment}. Triggering PerformLayout.");
@@ -197,15 +253,14 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [DefaultValue(StackFloatZOrder.InFrontOfTarget)]
         [Category(categorySTR)]
         [Description("Defines how this floating control's Z-order is managed relative to its target during layout.")]
-        public StackFloatZOrder Getlay_FloatZOrder(Control control)
-        {
-            return _lay_floatZOrderModes.ContainsKey(control) ? (StackFloatZOrder)_lay_floatZOrderModes[control] : StackFloatZOrder.InFrontOfTarget;
-        }
+        public StackFloatZOrder Getlay_FloatZOrder(Control control) => Common_GetProp(control).FloatZOrder;
         public void Setlay_FloatZOrder(Control control, StackFloatZOrder zOrderMode)
         {
-            if (Getlay_FloatZOrder(control) != zOrderMode)
+            StackProperties props = GetOrCreateProperties(control);
+
+            if (props.FloatZOrder != zOrderMode)
             {
-                _lay_floatZOrderModes[control] = zOrderMode;
+                props.FloatZOrder = zOrderMode;
                 // Changing the Z-order *mode* only affects how the *next* layout pass behaves.
                 // It does not require an immediate PerformLayout() itself.
                 // The Z-order will be applied during the next layout cycle triggered by other means.
@@ -222,16 +277,14 @@ namespace SharpBrowser.Controls // Ensure this namespace matches StackLayout.cs
         [DefaultValue(false)] // Default is NOT to include hidden controls
         [Category(categorySTR)]
         [Description("If true, this control will reserve space in the layout calculation even when its Visible property is false. If false (default), hidden controls are ignored by the layout unless they are floating.")]
-        public bool Getlay_IncludeHiddenInLayout(Control control)
-        {
-            // Return stored value or the default (false) if not set
-            return _lay_includeHiddenInLayout.ContainsKey(control) ? (bool)_lay_includeHiddenInLayout[control] : false;
-        }
+        public bool Getlay_IncludeHiddenInLayout(Control control) => Common_GetProp(control).IncludeHiddenInLayout;
         public void Setlay_IncludeHiddenInLayout(Control control, bool include)
         {
-            if (Getlay_IncludeHiddenInLayout(control) != include)
+            StackProperties props = GetOrCreateProperties(control);
+
+            if (props.IncludeHiddenInLayout != include)
             {
-                _lay_includeHiddenInLayout[control] = include;
+                props.IncludeHiddenInLayout = include;
                 // Changing this requires a layout recalculation
                 if (control?.Parent == this)
                 {
