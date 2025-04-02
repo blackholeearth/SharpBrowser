@@ -820,6 +820,64 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
             }
         }
 
+        private void Apply_ZOrder(Control floater, StackFloatZOrder zOrderMode, Control targetControl)
+        {
+            try
+            {
+                if (zOrderMode == StackFloatZOrder.Manual)
+                {
+                    LayoutLogger.Log($"    Floater '{floater.Name}': Z-Order unchanged (Mode: Manual)");
+                }
+                else if (targetControl != null) // Target exists
+                {
+                    int floaterIndex = this.Controls.GetChildIndex(floater);
+                    int targetIndex = this.Controls.GetChildIndex(targetControl);
+
+                    if (zOrderMode == StackFloatZOrder.InFrontOfTarget)
+                    {
+                        // Bring floater just in front of target visually
+                        // This might involve bringing it fully to front if target is near the front,
+                        // or moving it to index targetIndex + 1 if that's visually sufficient and less disruptive.
+                        // BringToFront() is simpler but might change order relative to other non-target controls.
+                        if (floaterIndex < targetIndex) // Only move if currently behind
+                        {
+                            this.Controls.SetChildIndex(floater, targetIndex); // Move just behind, then bring target back? No, easier:
+                            floater.BringToFront(); // Simplest approach
+                                                    // More precise: if (targetIndex < this.Controls.Count -1) this.Controls.SetChildIndex(floater, targetIndex + 1);
+                            LayoutLogger.Log($"    Floater '{floater.Name}': Brought In Front of Target '{targetControl.Name}' (Mode: {zOrderMode})");
+                        }
+
+                    }
+                    else // BehindTarget
+                    {
+                        // Send floater just behind target visually
+                        if (floaterIndex > targetIndex) // Only move if currently in front
+                        {
+                            this.Controls.SetChildIndex(floater, targetIndex);
+                            LayoutLogger.Log($"    Floater '{floater.Name}': Sent Behind Target '{targetControl.Name}' (Mode: {zOrderMode})");
+                        }
+                    }
+                }
+                else // No target (or target not found) - Relative to panel edges essentially
+                {
+                    if (zOrderMode == StackFloatZOrder.InFrontOfTarget)
+                    {
+                        if (this.Controls.GetChildIndex(floater) != this.Controls.Count - 1) floater.BringToFront();
+                        LayoutLogger.Log($"    Floater '{floater.Name}' (untargeted): Brought to Front (Mode: {zOrderMode})");
+                    }
+                    else if (zOrderMode == StackFloatZOrder.BehindTarget)
+                    {
+                        if (this.Controls.GetChildIndex(floater) != 0) floater.SendToBack();
+                        LayoutLogger.Log($"    Floater '{floater.Name}' (untargeted): Sent to Back (Mode: {zOrderMode})");
+                    }
+                }
+            }
+            catch (Exception zEx)
+            {
+                LayoutLogger.Log($"    ERROR setting Z-Index for {floater.Name} relative to {targetControl?.Name ?? "untargeted"} (Mode: {zOrderMode}): {zEx.Message}.");
+            }
+        }
+
         /// <summary>
         /// Phase 5 (v0/v4): Calculates and sets the AutoScrollMinSize based on the
         /// total extent of the *flow* controls, enabling scrolling if needed.
