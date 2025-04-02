@@ -32,7 +32,8 @@ namespace SharpBrowser {
 		private string appPath = Path.GetDirectoryName(Application.ExecutablePath) + @"\";
 		public static MainForm Instance;
 
-		public MainForm() {
+        Panel pnlToolbarOverlay;
+        public MainForm() {
 			Instance = this;
 
 			InitializeComponent();
@@ -40,17 +41,7 @@ namespace SharpBrowser {
 			InitBrowser();
 			SetFormTitle(null);
 
-
-		}
-
-		Panel pnlToolbarOverlay;
-		private void MainForm_Load(object sender, EventArgs e) {
-
-			InitAppIcon();
-			InitTooltips(this.Controls);
-			InitHotkeys();
-
-
+            //i dont wanna see gui elements changing -- so moved it here..
             this.SuspendLayout();
             PanelToolbar.SuspendLayout();
             {
@@ -59,17 +50,24 @@ namespace SharpBrowser {
                 //cant  do this on gui. paneltoolbar gets deleted. buggy designer 
                 //PanelToolbar location Fix -2025
                 PanelToolbar.Dock = DockStyle.None;
-			    PanelToolbar.BringToFront();
-			    PanelToolbar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-			    PanelToolbar.Location = new Point(0, TabPages.TabButton_Height + 1); //for different dpi, need stable way to get it.				 
-			    PanelToolbar.Width = this.Width;
-			    PanelToolbar.Width = pnlToolbarOverlay.Width;
+                PanelToolbar.BringToFront();
+                PanelToolbar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+                PanelToolbar.Location = new Point(0, TabPages.TabButton_Height + 1); //for different dpi, need stable way to get it.				 
+                PanelToolbar.Width = this.Width;
+                PanelToolbar.Width = pnlToolbarOverlay.Width;
             }
             PanelToolbar.ResumeLayout(true);
             this.ResumeLayout(true);
 
             if (Debugger.IsAttached)
-				pnlToolbarOverlay.BackColor = Color.Cyan;
+                pnlToolbarOverlay.BackColor = Color.Cyan;
+        }
+
+		private void MainForm_Load(object sender, EventArgs e) {
+
+			InitAppIcon();
+			InitTooltips(this.Controls);
+			InitHotkeys();
 
 		}
 
