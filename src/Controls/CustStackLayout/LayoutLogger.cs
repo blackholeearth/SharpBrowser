@@ -8,7 +8,11 @@ namespace SharpBrowser.Controls // Use the same namespace as StackLayout
     public static class LayoutLogger
     {
         // --- Configuration ---
-        public static bool IsEnabled { get; set; } = false; // Set to false to disable file logging easily
+        /// <summary>
+        /// false: writes only into Debug Window.
+        /// true : writes to File and Debug.Window.
+        /// </summary>
+        public static bool FileLogging_IsEnabled { get; set; } = false; // Set to false to disable file logging easily
 
         // --- Private Fields ---
         private static readonly string logFilePath;
@@ -18,7 +22,7 @@ namespace SharpBrowser.Controls // Use the same namespace as StackLayout
         // --- Static Constructor (runs once when the class is first used) ---
         static LayoutLogger()
         {
-            if (!IsEnabled)
+            if (!FileLogging_IsEnabled)
             {
                 Debug.WriteLine("LayoutLogger: File logging is disabled by configuration.");
                 logFilePath = null;
@@ -48,7 +52,7 @@ namespace SharpBrowser.Controls // Use the same namespace as StackLayout
                 Debug.WriteLine($"Stack Trace: {ex.StackTrace}");
                 logFilePath = null; // Ensure logging is disabled if path fails
                 initializationFailed = true;
-                IsEnabled = false; // Disable logging if init fails
+                FileLogging_IsEnabled = false; // Disable logging if init fails
             }
         }
 
@@ -62,7 +66,7 @@ namespace SharpBrowser.Controls // Use the same namespace as StackLayout
             Debug.WriteLine(fullHeader);
 
             // Attempt to write header to file only if enabled/initialized
-            if (!IsEnabled || initializationFailed || string.IsNullOrEmpty(logFilePath)) return;
+            if (!FileLogging_IsEnabled || initializationFailed || string.IsNullOrEmpty(logFilePath)) return;
 
             lock (logLock) // Ensure thread safety for file access
             {
@@ -96,7 +100,7 @@ namespace SharpBrowser.Controls // Use the same namespace as StackLayout
 
             // --- Conditionally write to file ---
             // Check if file logging is enabled and initialized correctly
-            if (!IsEnabled || initializationFailed || string.IsNullOrEmpty(logFilePath))
+            if (!FileLogging_IsEnabled || initializationFailed || string.IsNullOrEmpty(logFilePath))
             {
                 // File logging is disabled or failed, but Debug.WriteLine already happened.
                 return;
@@ -123,5 +127,7 @@ namespace SharpBrowser.Controls // Use the same namespace as StackLayout
                 }
             }
         }
+
+
     }
 }

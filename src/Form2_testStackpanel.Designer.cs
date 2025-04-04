@@ -60,9 +60,9 @@ namespace SharpBrowser
             button5 = new System.Windows.Forms.Button();
             flowLayoutPanel1 = new System.Windows.Forms.FlowLayoutPanel();
             button6 = new System.Windows.Forms.Button();
-            radioButton2 = new System.Windows.Forms.RadioButton();
             button7 = new System.Windows.Forms.Button();
             button8 = new System.Windows.Forms.Button();
+            radioButton2 = new System.Windows.Forms.RadioButton();
             stackLayout_no0.SuspendLayout();
             stackLayout_no4.SuspendLayout();
             stackLayout1.SuspendLayout();
@@ -74,7 +74,7 @@ namespace SharpBrowser
             TxtURL.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
             TxtURL.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, 0);
             stackLayout_no0.Setlay_ExpandWeight(TxtURL, 1);
-            TxtURL.Location = new System.Drawing.Point(138, 40);
+            TxtURL.Location = new System.Drawing.Point(228, 40);
             TxtURL.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             TxtURL.Name = "TxtURL";
             TxtURL.Size = new System.Drawing.Size(406, 34);
@@ -85,18 +85,18 @@ namespace SharpBrowser
             TxtURL2.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
             TxtURL2.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, 0);
             stackLayout_no4.Setlay_ExpandWeight(TxtURL2, 6);
-            TxtURL2.Location = new System.Drawing.Point(138, 11);
+            TxtURL2.Location = new System.Drawing.Point(156, 11);
             TxtURL2.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             TxtURL2.Name = "TxtURL2";
-            TxtURL2.Size = new System.Drawing.Size(462, 34);
+            TxtURL2.Size = new System.Drawing.Size(430, 34);
             TxtURL2.TabIndex = 25;
             // 
             // button2
             // 
             stackLayout_no4.Setlay_ExpandWeight(button2, 1);
-            button2.Location = new System.Drawing.Point(748, 13);
+            button2.Location = new System.Drawing.Point(742, 13);
             button2.Name = "button2";
-            button2.Size = new System.Drawing.Size(77, 29);
+            button2.Size = new System.Drawing.Size(71, 29);
             button2.TabIndex = 17;
             button2.Text = "button2";
             button2.UseVisualStyleBackColor = true;
@@ -115,7 +115,7 @@ namespace SharpBrowser
             stackLayout_no0.Setlay_FloatTargetName(BtnStop, "BtnRefresh");
             stackLayout_no0.Setlay_FloatZOrder(BtnStop, StackFloatZOrder.Manual);
             stackLayout_no0.Setlay_IsFloating(BtnStop, true);
-            BtnStop.Location = new System.Drawing.Point(92, 39);
+            BtnStop.Location = new System.Drawing.Point(152, 39);
             BtnStop.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             BtnStop.Name = "BtnStop";
             BtnStop.Size = new System.Drawing.Size(36, 36);
@@ -133,7 +133,7 @@ namespace SharpBrowser
             stackLayout_no0.Setlay_FloatTargetName(lbl_ZoomLevel, "TxtURL");
             stackLayout_no0.Setlay_FloatZOrder(lbl_ZoomLevel, StackFloatZOrder.Manual);
             stackLayout_no0.Setlay_IsFloating(lbl_ZoomLevel, true);
-            lbl_ZoomLevel.Location = new System.Drawing.Point(484, 47);
+            lbl_ZoomLevel.Location = new System.Drawing.Point(574, 47);
             lbl_ZoomLevel.Name = "lbl_ZoomLevel";
             lbl_ZoomLevel.Size = new System.Drawing.Size(42, 20);
             lbl_ZoomLevel.TabIndex = 26;
@@ -154,7 +154,7 @@ namespace SharpBrowser
             stackLayout_no4.Setlay_FloatOffsetX(BtnStop2, -36);
             stackLayout_no4.Setlay_FloatTargetName(BtnStop2, "BtnRefresh2");
             stackLayout_no4.Setlay_IsFloating(BtnStop2, true);
-            BtnStop2.Location = new System.Drawing.Point(92, 10);
+            BtnStop2.Location = new System.Drawing.Point(108, 10);
             BtnStop2.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             BtnStop2.Name = "BtnStop2";
             BtnStop2.Size = new System.Drawing.Size(36, 36);
@@ -164,7 +164,7 @@ namespace SharpBrowser
             // button1
             // 
             stackLayout_no0.Setlay_ExpandWeight(button1, 1);
-            button1.Location = new System.Drawing.Point(554, 32);
+            button1.Location = new System.Drawing.Point(674, 32);
             button1.Name = "button1";
             button1.Size = new System.Drawing.Size(133, 49);
             button1.TabIndex = 17;
@@ -182,7 +182,7 @@ namespace SharpBrowser
             stackLayout_no4.Setlay_FloatTargetName(label1, "TxtURL2");
             stackLayout_no4.Setlay_FloatZOrder(label1, StackFloatZOrder.Manual);
             stackLayout_no4.Setlay_IsFloating(label1, true);
-            label1.Location = new System.Drawing.Point(540, 18);
+            label1.Location = new System.Drawing.Point(526, 18);
             label1.Name = "label1";
             label1.Size = new System.Drawing.Size(42, 20);
             label1.TabIndex = 26;
@@ -192,12 +192,7 @@ namespace SharpBrowser
             // 
             // button3
             // 
-            stackLayout_no0.Setlay_ExpandWeight(button3, 1);
-            stackLayout_no0.Setlay_FloatAlignment(button3, FloatAlignment.ToBottomOf);
-            stackLayout_no0.Setlay_FloatTargetName(button3, "button1");
-            stackLayout_no0.Setlay_FloatZOrder(button3, StackFloatZOrder.Manual);
-            stackLayout_no0.Setlay_IsFloating(button3, true);
-            button3.Location = new System.Drawing.Point(554, 81);
+            button3.Location = new System.Drawing.Point(598, 33);
             button3.Name = "button3";
             button3.Size = new System.Drawing.Size(88, 29);
             button3.TabIndex = 27;
@@ -218,7 +213,6 @@ namespace SharpBrowser
             // 
             stackLayout_no0.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
             stackLayout_no0.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            stackLayout_no0.Controls.Add(button3);
             stackLayout_no0.Controls.Add(lbl_ZoomLevel);
             stackLayout_no0.Controls.Add(BtnBack);
             stackLayout_no0.Controls.Add(BtnForward);
@@ -231,7 +225,7 @@ namespace SharpBrowser
             stackLayout_no0.Controls.Add(BtnMenu);
             stackLayout_no0.lay_ChildAxisAlignment = StackChildAxisAlignment.Center;
             stackLayout_no0.lay_Orientation = StackOrientation.Horizontal;
-            stackLayout_no0.lay_Spacing = 10;
+            stackLayout_no0.lay_Spacing = 40;
             stackLayout_no0.Location = new System.Drawing.Point(43, 35);
             stackLayout_no0.Name = "stackLayout_no0";
             stackLayout_no0.Size = new System.Drawing.Size(827, 116);
@@ -264,7 +258,7 @@ namespace SharpBrowser
             BtnForward.IconColor = System.Drawing.Color.Black;
             BtnForward.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnForward.IconSize = 30;
-            BtnForward.Location = new System.Drawing.Point(46, 39);
+            BtnForward.Location = new System.Drawing.Point(76, 39);
             BtnForward.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             BtnForward.Name = "BtnForward";
             BtnForward.Size = new System.Drawing.Size(36, 36);
@@ -281,7 +275,7 @@ namespace SharpBrowser
             BtnRefresh.IconColor = System.Drawing.Color.Black;
             BtnRefresh.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnRefresh.IconSize = 30;
-            BtnRefresh.Location = new System.Drawing.Point(92, 39);
+            BtnRefresh.Location = new System.Drawing.Point(152, 39);
             BtnRefresh.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             BtnRefresh.Name = "BtnRefresh";
             BtnRefresh.Size = new System.Drawing.Size(36, 36);
@@ -299,7 +293,7 @@ namespace SharpBrowser
             BtnDownloads.IconColor = System.Drawing.Color.Black;
             BtnDownloads.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnDownloads.IconSize = 30;
-            BtnDownloads.Location = new System.Drawing.Point(697, 39);
+            BtnDownloads.Location = new System.Drawing.Point(847, 39);
             BtnDownloads.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             BtnDownloads.Name = "BtnDownloads";
             BtnDownloads.Size = new System.Drawing.Size(36, 36);
@@ -318,7 +312,7 @@ namespace SharpBrowser
             BtnHome.IconColor = System.Drawing.Color.Black;
             BtnHome.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnHome.IconSize = 30;
-            BtnHome.Location = new System.Drawing.Point(743, 39);
+            BtnHome.Location = new System.Drawing.Point(923, 39);
             BtnHome.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             BtnHome.Name = "BtnHome";
             BtnHome.Size = new System.Drawing.Size(36, 36);
@@ -339,7 +333,7 @@ namespace SharpBrowser
             BtnMenu.IconColor = System.Drawing.Color.Black;
             BtnMenu.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnMenu.IconSize = 30;
-            BtnMenu.Location = new System.Drawing.Point(789, 39);
+            BtnMenu.Location = new System.Drawing.Point(999, 39);
             BtnMenu.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             BtnMenu.Name = "BtnMenu";
             BtnMenu.Size = new System.Drawing.Size(36, 36);
@@ -364,9 +358,10 @@ namespace SharpBrowser
             stackLayout_no4.lay_ChildAxisAlignment = StackChildAxisAlignment.Center;
             stackLayout_no4.lay_Orientation = StackOrientation.Horizontal;
             stackLayout_no4.lay_PerformLayout_calcMethod_No = 4;
-            stackLayout_no4.lay_Spacing = 10;
+            stackLayout_no4.lay_Spacing = 12;
             stackLayout_no4.Location = new System.Drawing.Point(42, 212);
             stackLayout_no4.Name = "stackLayout_no4";
+            stackLayout_no4.Padding = new System.Windows.Forms.Padding(12, 0, 12, 0);
             stackLayout_no4.Size = new System.Drawing.Size(827, 58);
             stackLayout_no4.TabIndex = 27;
             // 
@@ -380,7 +375,7 @@ namespace SharpBrowser
             ıconButton1.IconColor = System.Drawing.Color.Black;
             ıconButton1.IconFont = FontAwesome.Sharp.IconFont.Auto;
             ıconButton1.IconSize = 30;
-            ıconButton1.Location = new System.Drawing.Point(0, 10);
+            ıconButton1.Location = new System.Drawing.Point(12, 10);
             ıconButton1.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             ıconButton1.Name = "ıconButton1";
             ıconButton1.Size = new System.Drawing.Size(36, 36);
@@ -397,7 +392,7 @@ namespace SharpBrowser
             ıconButton2.IconColor = System.Drawing.Color.Black;
             ıconButton2.IconFont = FontAwesome.Sharp.IconFont.Auto;
             ıconButton2.IconSize = 30;
-            ıconButton2.Location = new System.Drawing.Point(46, 10);
+            ıconButton2.Location = new System.Drawing.Point(60, 10);
             ıconButton2.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             ıconButton2.Name = "ıconButton2";
             ıconButton2.Size = new System.Drawing.Size(36, 36);
@@ -414,7 +409,7 @@ namespace SharpBrowser
             BtnRefresh2.IconColor = System.Drawing.Color.Black;
             BtnRefresh2.IconFont = FontAwesome.Sharp.IconFont.Auto;
             BtnRefresh2.IconSize = 30;
-            BtnRefresh2.Location = new System.Drawing.Point(92, 10);
+            BtnRefresh2.Location = new System.Drawing.Point(108, 10);
             BtnRefresh2.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             BtnRefresh2.Name = "BtnRefresh2";
             BtnRefresh2.Size = new System.Drawing.Size(36, 36);
@@ -432,7 +427,7 @@ namespace SharpBrowser
             ıconButton5.IconColor = System.Drawing.Color.Black;
             ıconButton5.IconFont = FontAwesome.Sharp.IconFont.Auto;
             ıconButton5.IconSize = 30;
-            ıconButton5.Location = new System.Drawing.Point(610, 10);
+            ıconButton5.Location = new System.Drawing.Point(598, 10);
             ıconButton5.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             ıconButton5.Name = "ıconButton5";
             ıconButton5.Size = new System.Drawing.Size(36, 36);
@@ -451,7 +446,7 @@ namespace SharpBrowser
             ıconButton6.IconColor = System.Drawing.Color.Black;
             ıconButton6.IconFont = FontAwesome.Sharp.IconFont.Auto;
             ıconButton6.IconSize = 30;
-            ıconButton6.Location = new System.Drawing.Point(656, 10);
+            ıconButton6.Location = new System.Drawing.Point(646, 10);
             ıconButton6.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             ıconButton6.Name = "ıconButton6";
             ıconButton6.Size = new System.Drawing.Size(36, 36);
@@ -472,7 +467,7 @@ namespace SharpBrowser
             ıconButton7.IconColor = System.Drawing.Color.Black;
             ıconButton7.IconFont = FontAwesome.Sharp.IconFont.Auto;
             ıconButton7.IconSize = 30;
-            ıconButton7.Location = new System.Drawing.Point(702, 10);
+            ıconButton7.Location = new System.Drawing.Point(694, 10);
             ıconButton7.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             ıconButton7.Name = "ıconButton7";
             ıconButton7.Size = new System.Drawing.Size(36, 36);
@@ -517,9 +512,9 @@ namespace SharpBrowser
             // flowLayoutPanel1
             // 
             flowLayoutPanel1.Controls.Add(button6);
-            flowLayoutPanel1.Controls.Add(radioButton2);
             flowLayoutPanel1.Controls.Add(button7);
             flowLayoutPanel1.Controls.Add(button8);
+            flowLayoutPanel1.Controls.Add(radioButton2);
             flowLayoutPanel1.Location = new System.Drawing.Point(497, 323);
             flowLayoutPanel1.Name = "flowLayoutPanel1";
             flowLayoutPanel1.Size = new System.Drawing.Size(325, 174);
@@ -534,21 +529,9 @@ namespace SharpBrowser
             button6.Text = "button6";
             button6.UseVisualStyleBackColor = true;
             // 
-            // radioButton2
-            // 
-            radioButton2.AutoSize = true;
-            radioButton2.Location = new System.Drawing.Point(103, 3);
-            radioButton2.Name = "radioButton2";
-            radioButton2.Size = new System.Drawing.Size(117, 24);
-            radioButton2.TabIndex = 1;
-            radioButton2.TabStop = true;
-            radioButton2.Text = "radioButton2";
-            radioButton2.UseVisualStyleBackColor = true;
-            // 
             // button7
             // 
-            flowLayoutPanel1.SetFlowBreak(button7, true);
-            button7.Location = new System.Drawing.Point(226, 3);
+            button7.Location = new System.Drawing.Point(103, 3);
             button7.Name = "button7";
             button7.Size = new System.Drawing.Size(94, 29);
             button7.TabIndex = 2;
@@ -557,18 +540,30 @@ namespace SharpBrowser
             // 
             // button8
             // 
-            button8.Location = new System.Drawing.Point(3, 38);
+            button8.Location = new System.Drawing.Point(203, 3);
             button8.Name = "button8";
             button8.Size = new System.Drawing.Size(94, 29);
             button8.TabIndex = 3;
             button8.Text = "button8";
             button8.UseVisualStyleBackColor = true;
             // 
+            // radioButton2
+            // 
+            radioButton2.AutoSize = true;
+            radioButton2.Location = new System.Drawing.Point(3, 38);
+            radioButton2.Name = "radioButton2";
+            radioButton2.Size = new System.Drawing.Size(117, 24);
+            radioButton2.TabIndex = 1;
+            radioButton2.TabStop = true;
+            radioButton2.Text = "radioButton2";
+            radioButton2.UseVisualStyleBackColor = true;
+            // 
             // Form2_testStackpanel
             // 
             AutoScaleDimensions = new System.Drawing.SizeF(8F, 20F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             ClientSize = new System.Drawing.Size(950, 546);
+            Controls.Add(button3);
             Controls.Add(flowLayoutPanel1);
             Controls.Add(stackLayout1);
             Controls.Add(stackLayout_no4);

@@ -1563,42 +1563,42 @@ namespace SharpBrowser.Controls // Ensure this namespace matches your project
 
 
 
-        /// <summary>
-        /// Manages component change notifications from the designer environment.
-        /// </summary>
-        [Browsable(false)]
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public override ISite Site
-        {
-            get => base.Site;
-            set
-            {
-                // Unsubscribe from old service
-                if (_componentChangeService != null)
-                {
-                    _componentChangeService.ComponentChanged -= OnComponentChanged;
-                    LayoutLogger.Log($"StackLayout [{this.Name}]: Unsubscribed from ComponentChangeService.");
-                    _componentChangeService = null; // Clear reference before setting new site
-                }
+        ///// <summary>
+        ///// Manages component change notifications from the designer environment.
+        ///// </summary>
+        //[Browsable(false)]
+        //[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        //public override ISite Site
+        //{
+        //    get => base.Site;
+        //    set
+        //    {
+        //        // Unsubscribe from old service
+        //        if (_componentChangeService != null)
+        //        {
+        //            _componentChangeService.ComponentChanged -= OnComponentChanged;
+        //            LayoutLogger.Log($"StackLayout [{this.Name}]: Unsubscribed from ComponentChangeService.");
+        //            _componentChangeService = null; // Clear reference before setting new site
+        //        }
 
-                base.Site = value; // Set the new site
+        //        base.Site = value; // Set the new site
 
-                // Subscribe to new service if available
-                if (value != null)
-                {
-                    _componentChangeService = (IComponentChangeService)value.GetService(typeof(IComponentChangeService));
-                    if (_componentChangeService != null)
-                    {
-                        _componentChangeService.ComponentChanged += OnComponentChanged;
-                        LayoutLogger.Log($"StackLayout [{this.Name}]: Subscribed to new ComponentChangeService.");
-                    }
-                    else
-                    {
-                        LayoutLogger.Log($"StackLayout [{this.Name}]: Could not get ComponentChangeService from new site.");
-                    }
-                }
-            }
-        }
+        //        // Subscribe to new service if available
+        //        if (value != null)
+        //        {
+        //            _componentChangeService = (IComponentChangeService)value.GetService(typeof(IComponentChangeService));
+        //            if (_componentChangeService != null)
+        //            {
+        //                _componentChangeService.ComponentChanged += OnComponentChanged;
+        //                LayoutLogger.Log($"StackLayout [{this.Name}]: Subscribed to new ComponentChangeService.");
+        //            }
+        //            else
+        //            {
+        //                LayoutLogger.Log($"StackLayout [{this.Name}]: Could not get ComponentChangeService from new site.");
+        //            }
+        //        }
+        //    }
+        //}
 
         /// <summary>
         /// Handles component change events from the designer. Triggers layout if a relevant

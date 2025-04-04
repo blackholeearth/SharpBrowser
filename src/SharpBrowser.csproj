@@ -18,6 +18,10 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="Controls\CustStackLayout\StackLayoutDesigner.cs" />
+    <Compile Remove="Controls\CustStackLayout\StackLayout_DesignTime.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Update="Controls\BrowserTabStrip\BaseStyledPanel.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -41,5 +45,8 @@
   <ItemGroup>
     <Reference Include="System.Net" />
     <Reference Include="System.Web" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Controls\CustStackLayout\DesignerV2\" />
   </ItemGroup>
 </Project>
