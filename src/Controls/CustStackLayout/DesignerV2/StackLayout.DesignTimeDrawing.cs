@@ -7,53 +7,110 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D; // Required for drawing
 using System.Linq;
-using System.Threading.Tasks;
-using System.Threading;
+using System.Runtime.InteropServices; // For GCHandle potentially if needed elsewhere
+using System.Text; // For StringBuilder if needed elsewhere
+using System.Threading; // For Interlocked and Thread.Sleep
+using System.Threading.Tasks; // For Task.Run
 using System.Windows.Forms;
-using SharpBrowser.Controls.DesignTime; // <<< Namespace for IDesignTimeDrawer, Drawers, HwndDrawingHelper
+using SharpBrowser.Controls.DesignTime; // <<< Namespace for IDesignTimeDrawer, Drawers, HwndDrawingHelper, NativeMethods, Snapshot classes
 
 // Ensure this namespace matches your StackLayout.cs and StackLayout.Extender.cs
 namespace SharpBrowser.Controls
 {
+    // --- Snapshot classes defined here for convenience, or move to separate file ---
+
+    // Holds a snapshot of the state needed for drawing adorners
+    // Captured on the UI thread to be passed to the background thread
+    internal class DesignTimeStateSnapshot
+    {
+        public bool IsValid { get; set; } = false; // Was snapshot successful?
+        public Point PanelScreenLocation { get; set; } = Point.Empty;
+
+        // Control Data (Panel-Relative Bounds and Necessary Properties)
+        public List<ControlSnapshot> VisibleControls { get; } = new List<ControlSnapshot>();
+
+        // Selection/Drag State
+        public string SelectedControlName { get; set; } = null;
+        public StackLayout.DesignDragMode CurrentDragMode { get; set; } = StackLayout.DesignDragMode.None; // Use fully qualified name
+        public string DragSourceControlName { get; set; } = null;
+        public StackLayout.PointType DragStartConnectorType { get; set; } = StackLayout.PointType.None; // Use fully qualified name
+        public Point DragCurrentScreenPoint { get; set; } = Point.Empty; // Already screen coords
+        public string BreakTargetControlName { get; set; } = null;
+        public StackLayout.PointType BreakTargetConnectorType { get; set; } = StackLayout.PointType.None; // Use fully qualified name
+
+        // Connection Data (Source Name -> Target Info)
+        public Dictionary<string, ConnectionInfo> Connections { get; } = new Dictionary<string, ConnectionInfo>();
+    }
+
+    internal class ControlSnapshot
+    {
+        public string Name { get; set; }
+        public Rectangle Bounds { get; set; } // Relative to StackLayout Panel
+        public bool IsVisible { get; set; } // Actual visibility
+
+        // Store connection state derived on UI thread
+        public bool IsConnectionSource { get; set; }
+        public StackLayout.PointType SourceConnector { get; set; } = StackLayout.PointType.None; // Use fully qualified name
+        public bool IsConnectionTarget { get; set; }
+        public StackLayout.PointType TargetConnector { get; set; } = StackLayout.PointType.None; // Use fully qualified name
+        public string TargetControlName { get; set; } // If it's a source
+        public FloatAlignment TargetAlignment { get; set; } // If it's a source - FloatAlignment comes from StackLayout's namespace
+    }
+
+    internal class ConnectionInfo
+    {
+        public string TargetName { get; set; }
+        public FloatAlignment Alignment { get; set; } // FloatAlignment comes from StackLayout's namespace
+        // Add Offsets, ZOrder etc. if needed by drawing logic
+    }
+    // --- End Snapshot Classes ---
+
+
     // The other part of StackLayout - focused ONLY on Design-Time behavior
     public partial class StackLayout
     {
         #region Design-Time Constants & Fields
 
         // --- Configuration ---
-        private const int DesignTimeLineRoutingMargin = 15; // Pixels lines route away from controls
-        private const int DesignTimeConnectorSize = 10;     // Size of the connector icons
-        private const int DesignTimeConnectorOffset = 0;    // Pixels OUTSIDE the control edge (0 = touching)
-        private const float DesignTimeLineWidth = 2.5f;     // Width for connection lines and borders
-        // --- Derived ---
+        private const int DesignTimeLineRoutingMargin = 15;
+        private const int DesignTimeConnectorSize = 10;
+        private const int DesignTimeConnectorOffset = 0 - DesignTimeConnectorSize / 2; // 0 touch outside--  
+        private const float DesignTimeLineWidth = 2.5f;
         private const int DesignTimeHalfConnectorSize = DesignTimeConnectorSize / 2;
 
-        // --- Cached Services (Attempt to get via Site) ---
+        // --- Cached Services ---
         private ISelectionService _selectionServiceDT = null;
-        private IComponentChangeService _componentChangeServiceDT = null; // Separate reference for design-time use
+        private IComponentChangeService _componentChangeServiceDT = null;
         private IDesignerHost _designerHostDT = null;
-        private ISelectionService _selectionServiceDT_ForEvents = null; // Store the service we subscribed to for SelectionChanged
+        private ISelectionService _selectionServiceDT_ForEvents = null;
 
-        // --- HWND Drawing Helper ---
-        private HwndDrawingHelper _hwndDrawingHelper = null; // Instance of the helper for HWND drawing mode
+        // --- HWND Drawing Helper (Only used if FindTargetWindow is called, potentially obsolete now) ---
+        private HwndDrawingHelper _hwndDrawingHelper = null;
+
+        // --- Screen Drawing Task Flag ---
+        private static int _screenDrawTaskRunning = 0;
 
         // --- Design-Time Interaction State ---
-        private enum DesignDragMode { None, Connecting, Breaking }
+        // Nested enum definitions need to be accessible or defined outside if used across files easily
+        // Or use fully qualified names like StackLayout.DesignDragMode
+        internal enum DesignDragMode { None, Connecting, Breaking } // Made internal for snapshot access visibility if needed
         private DesignDragMode _currentDragModeDT = DesignDragMode.None;
-        private Control _sourceControlDT = null;        // Control drag initiated FROM
-        private PointType _startConnectorTypeDT = PointType.None; // Connector type drag physically started on
+        private Control _sourceControlDT = null;
+        internal enum PointType { None, Top, Bottom, Left, Right } // Made internal for snapshot access visibility
+        private PointType _startConnectorTypeDT = PointType.None;
         private Point _dragStartPointScreenDT = Point.Empty;
         private Point _dragCurrentPointScreenDT = Point.Empty;
-        private Control _breakLinkTargetControlDT = null; // Control whose TARGET arrow was dragged
-        private PointType _breakLinkTargetConnectorDT = PointType.None; // The specific TARGET arrow type dragged
-        private bool _servicesCheckedDT = false; // Flag to check services only once per instance
+        private Control _breakLinkTargetControlDT = null;
+        private PointType _breakLinkTargetConnectorDT = PointType.None;
+        private bool _servicesCheckedDT = false;
 
         // --- Colors ---
         private Color TargetConnectorConnectedColor = Color.Red;
         private Color SourceConnectorConnectedColor = Color.Blue;
+        private Color ConnectionLineColor;
 
-        // --- Local Enum ---
-        private enum PointType { None, Top, Bottom, Left, Right }
+        // --- Local Enum --- Already defined above internal PointType ---
+        // private enum PointType { None, Top, Bottom, Left, Right }
 
         #endregion
 
@@ -100,6 +157,7 @@ namespace SharpBrowser.Controls
                 if (base.Site != null)
                 {
                     // ComponentChangeService (using MAIN partial class field _componentChangeService)
+                    // Note: _componentChangeService is defined in StackLayout.cs
                     var oldComponentSvc = base.Site.GetService(typeof(IComponentChangeService)) as IComponentChangeService;
                     if (oldComponentSvc != null && _componentChangeService == oldComponentSvc)
                     {
@@ -126,7 +184,7 @@ namespace SharpBrowser.Controls
                 _servicesCheckedDT = false; // Force re-check on next EnsureServicesDT call
 
                 // --- Subscribe to NEW Services (if site is not null) ---
-                _componentChangeService = null; // Clear main reference first
+                _componentChangeService = null; // Clear main reference first (defined in StackLayout.cs)
                 _selectionServiceDT_ForEvents = null; // Clear event subscription reference
 
                 if (value != null)
@@ -155,376 +213,480 @@ namespace SharpBrowser.Controls
 
         #endregion
 
-        #region OnPaint Override (Design-Time) - Uses Drawing Method Selector
+        #region OnPaint Override (Design-Time) - Selects Drawing Mode
 
-
-
-
-        // --- Keep the flag to prevent task flood ---
-        private static int _screenDrawTaskRunning = 0; // Renamed for clarity
-
+        Throttler throttle1 = new Throttler();
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
 
             if (this.DesignMode && lay__DesignTimeDrawingMethod == DesignTimeDrawingMethod.HwndExperimental)
             {
-                // --- Launch SCREEN Drawing Task (No HWND needed) ---
-                // Try to start a new task ONLY if one isn't already marked as running
+                // --- Launch SCREEN Drawing Task (No HWND needed directly here) ---
                 if (Interlocked.CompareExchange(ref _screenDrawTaskRunning, 1, 0) == 0)
                 {
-                    // We successfully set the flag from 0 to 1, launch the task
-                    Task.Run(() => DrawTestPatternOnScreen_UserTiming()); // Call screen draw method
-                    // LayoutLogger.Log($"StackLayoutDT [{this.Name}]: Launched SCREEN drawing task."); // Can be noisy
+                    DesignTimeStateSnapshot snapshot = CaptureDesignTimeState();
+                    if (snapshot.IsValid)
+                    {
+
+                        LayoutLogger.Log($"Throttling 200ms  ---  Task.Run(() => DrawAdornersOnScreen_FromSnapshot(snapshot)); "); 
+                        throttle1.Throttle(200,_ => {
+
+                            Task.Run(() => DrawAdornersOnScreen_FromSnapshot(snapshot)); // Call screen draw method
+                        });
+                        //Task.Run(() => DrawAdornersOnScreen_FromSnapshot(snapshot)); // Call screen draw method
+                        //// LayoutLogger.Log($"StackLayoutDT [{this.Name}]: Launched SCREEN drawing task."); // Noisy
+                    }
+                    else
+                    {
+                        LayoutLogger.Log($"StackLayoutDT [{this.Name}]: Failed state capture. Skipping screen draw.");
+                        Interlocked.Exchange(ref _screenDrawTaskRunning, 0); // Reset flag if capture failed immediately
+                    }
+                    // Flag is reset inside the Task's finally block on successful launch
                 }
                 // else: Task already running, skip.
             }
             else if (this.DesignMode && lay__DesignTimeDrawingMethod == DesignTimeDrawingMethod.Direct)
             {
                 // --- Execute standard Direct Drawing ---
-                IDesignTimeDrawer drawer = new DirectDrawer(e.Graphics);
-                try { EnsureServicesDT(); PaintDesignTimeVisuals(drawer); } catch (Exception ex) { /* Log */ try { e.Graphics.DrawString("DT Paint Error", Font, Brushes.Red, 3, 3); } catch { } }
-            }
-        }
-
-
-        // --- NEW Background Task Method for Screen Drawing ---
-        private void DrawTestPatternOnScreen_UserTiming()
-        {
-            LayoutLogger.Log($"DrawTestPatternOnScreen_UserTiming: Starting screen drawing task.");
-            IntPtr screenDC = IntPtr.Zero; // Device Context handle
-            Graphics screenGraphics = null; // Graphics object
-            try
-            {
-                // --- User's Timing Hack ---
-                Thread.Sleep(500); // Wait for potential repaints
-
-                // 1. Get the Screen Device Context
-                screenDC = NativeMethods.GetDC(IntPtr.Zero); // IntPtr.Zero means the screen
-                if (screenDC == IntPtr.Zero)
-                {
-                    LayoutLogger.Log("DrawTestPatternOnScreen_UserTiming: Failed to get Screen DC.");
-                    return; // Exit if failed
-                }
-                LayoutLogger.Log($"DrawTestPatternOnScreen_UserTiming: Obtained Screen DC: {screenDC}.");
-
-                // 2. Create Graphics object from the Screen DC
-                screenGraphics = Graphics.FromHdc(screenDC);
-                if (screenGraphics == null)
-                {
-                    LayoutLogger.Log("DrawTestPatternOnScreen_UserTiming: Failed to create Graphics from Screen DC.");
-                    return; // Exit if failed
-                }
-
-                // Apply quality settings if desired
-                // screenGraphics.SmoothingMode = SmoothingMode.AntiAlias;
-
-                // 3. Perform Drawing using SCREEN coordinates
-                LayoutLogger.Log($"DrawTestPatternOnScreen_UserTiming: Drawing pattern on screen...");
-                for (int i = 0; i < 1920; i = i + 50) // Your diagonal pattern loop
-                {
-                    try
-                    {
-                        screenGraphics.FillRectangle(Brushes.Magenta, i, i, 30, 30); // Use Magenta for distinction
-                    }
-                    catch (Exception drawEx)
-                    {
-                        // Log drawing specific errors if they occur mid-loop
-                        LayoutLogger.Log($"DrawTestPatternOnScreen_UserTiming: Error during FillRectangle at ({i},{i}): {drawEx.Message}");
-                        break; // Exit loop on drawing error
-                    }
-                }
-                LayoutLogger.Log($"DrawTestPatternOnScreen_UserTiming: Finished drawing pattern.");
-
-            }
-            catch (Exception ex)
-            {
-                LayoutLogger.Log($"DrawTestPatternOnScreen_UserTiming: Error: {ex.Message}");
-            }
-            finally
-            {
-                // --- IMPORTANT: Clean up ---
-                // 4. Dispose the Graphics object
-                screenGraphics?.Dispose();
-
-                // 5. Release the Screen Device Context
-                if (screenDC != IntPtr.Zero)
-                {
-                    NativeMethods.ReleaseDC(IntPtr.Zero, screenDC);
-                    // LayoutLogger.Log($"DrawTestPatternOnScreen_UserTiming: Released Screen DC: {screenDC}."); // Can be noisy
-                }
-
-                // 6. Reset the task running flag
-                Interlocked.Exchange(ref _screenDrawTaskRunning, 0);
-                LayoutLogger.Log($"DrawTestPatternOnScreen_UserTiming: Task finished. Flag reset.");
-            }
-        }
-
-
-
-        protected void OnPaint_old(PaintEventArgs e)
-        {
-            // 1. Call base to draw the panel background etc.
-            base.OnPaint(e);
-
-            // 2. Execute custom design-time drawing logic ONLY if in DesignMode
-            if (this.DesignMode)
-            {
-                IDesignTimeDrawer drawer = null;
-                // Check the property defined in StackLayout.cs
-                bool useHwnd = (lay__DesignTimeDrawingMethod == DesignTimeDrawingMethod.HwndExperimental);
-                bool canDraw = false;
-
-                // 3. Select and prepare the drawer
-                if (useHwnd)
-                {
-                    if (_hwndDrawingHelper == null) 
-                        _hwndDrawingHelper = new HwndDrawingHelper(this);
-
-                    if (_hwndDrawingHelper.BeginDraw()) // Attempt to get Graphics for HWND
-                    {
-                        drawer = new HwndDrawer(_hwndDrawingHelper);
-                        canDraw = true;
-                        // LayoutLogger.Log($"StackLayoutDT [{this.Name}]: OnPaint using HWND drawer."); // Noisy
-                    }
-                    else
-                    {
-                        LayoutLogger.Log($"StackLayoutDT [{this.Name}]: OnPaint - Could not BeginDraw() for HWND. Adorners skipped.");
-                        // Optionally draw error on e.Graphics as fallback feedback   <<- Nice!!. Extremely helpful. for me..
-                        try { e.Graphics.DrawString("HWND Draw Failed", Font, Brushes.Red, 3, 3); } catch { }
-                    }
-                }
-                else // Use Direct drawing
-                {
-                    // Dispose any existing HWND helper if switching away
-                    _hwndDrawingHelper?.Dispose();
-                    _hwndDrawingHelper = null;
-
-                    drawer = new DirectDrawer(e.Graphics); // Use standard Graphics object
-                    canDraw = true;
-                    // LayoutLogger.Log($"StackLayoutDT [{this.Name}]: OnPaint using Direct drawer."); // Noisy
-                }
-
-
-                // 4. Execute drawing logic if a drawer was successfully created
-                if (canDraw && drawer != null)
-                {
-                    try
-                    {
-                        EnsureServicesDT(); // Get designer services if needed
-                        PaintDesignTimeVisuals(drawer); // Pass the chosen drawer interface
-                    }
-                    catch (Exception ex)
-                    {
-                        LayoutLogger.Log($"StackLayoutDT [{this.Name}]: ERROR during PaintDesignTimeVisuals: {ex.Message}\n{ex.StackTrace}");
-                        // Optionally draw error using the DirectDrawer if possible, or log only
-                        if (!useHwnd)
-                        {
-                             try { e.Graphics.DrawString("DT Paint Error", Font, Brushes.Red, 3, 3); } catch { }
-                        }
-                    }
-                    finally
-                    {
-                        // 5. Clean up HWND drawing if it was used
-                        if (useHwnd)
-                        {
-                            _hwndDrawingHelper?.EndDraw(); // Release HWND Graphics object
-                        }
-                        // DirectDrawer using e.Graphics doesn't need explicit cleanup here
-                    }
-                }
-            }
-            else
-            {
-                // If not in design mode, ensure HWND helper is disposed
+                // Dispose HWND helper if mode changed away from HWND
                 _hwndDrawingHelper?.Dispose();
                 _hwndDrawingHelper = null;
+
+                IDesignTimeDrawer drawer = new DirectDrawer(e.Graphics); // Use standard Graphics
+                try
+                {
+                    EnsureServicesDT();
+                    PaintDesignTimeVisuals(drawer); // Call direct drawing logic using the interface
+                }
+                catch (Exception ex) { LayoutLogger.Log($"StackLayoutDT [{this.Name}]: ERROR Direct Paint: {ex.Message}"); try { e.Graphics.DrawString("DT Paint Error", Font, Brushes.Red, 3, 3); } catch { } }
+                // No EndDraw needed for DirectDrawer
             }
+            else // Not design mode
+            {
+                // Ensure helpers/flags related to design-time are cleaned up if necessary
+                _hwndDrawingHelper?.Dispose();
+                _hwndDrawingHelper = null;
+                // Consider if _screenDrawTaskRunning needs reset here if app closes while task runs? Probably not critical.
+            }
+        }
+        #endregion // OnPaint Override
+
+        #region State Capture for Background Thread
+
+        // Run on UI Thread (called from OnPaint in HwndExperimental mode)
+        private DesignTimeStateSnapshot CaptureDesignTimeState()
+        {
+            var snapshot = new DesignTimeStateSnapshot();
+            if (!this.IsHandleCreated || this.IsDisposed || !this.DesignMode) return snapshot; // Check DesignMode too
+
+            try
+            {
+                EnsureServicesDT(); // Ensure _selectionServiceDT, _designerHostDT etc are available
+
+                if (_designerHostDT == null || _selectionServiceDT == null)
+                {
+                    LayoutLogger.Log("CaptureDesignTimeState WARNING: Designer services not available.");
+                    // Decide if snapshot should be invalid or proceed with limited info
+                    // return snapshot; // Return invalid snapshot
+                }
+
+
+                snapshot.PanelScreenLocation = this.PointToScreen(Point.Empty);
+
+                // Capture Selection/Drag State (Check for null services)
+                if (_selectionServiceDT != null && _selectionServiceDT.PrimarySelection is Control selCtrl && selCtrl.Parent == this)
+                { snapshot.SelectedControlName = selCtrl.Name; }
+                snapshot.CurrentDragMode = _currentDragModeDT;
+                snapshot.DragSourceControlName = _sourceControlDT?.Name;
+                snapshot.DragStartConnectorType = _startConnectorTypeDT;
+                snapshot.DragCurrentScreenPoint = _dragCurrentPointScreenDT;
+                snapshot.BreakTargetControlName = _breakLinkTargetControlDT?.Name;
+                snapshot.BreakTargetConnectorType = _breakLinkTargetConnectorDT;
+
+                // Capture Control Data and Connections
+                // Need DesignerHost to lookup targets by name if needed during connection analysis
+                var componentLookup = _designerHostDT?.Container?.Components; // Check for null host/container
+
+                foreach (Control c in this.Controls.OfType<Control>())
+                {
+                    // Use GetPropertiesOrDefault defined in StackLayout.Extender.cs
+                    StackProperties stackProps = GetPropertiesOrDefault(c);
+                    if (!c.Visible && !stackProps.IncludeHiddenInLayout) continue;
+
+                    var controlSnap = new ControlSnapshot { Name = c.Name, Bounds = c.Bounds, IsVisible = c.Visible };
+
+                    // Get connection state (requires UI thread access potentially via GetPropertiesOrDefault)
+                    // Pass lookup for safety if GetConnectionState needs it
+                    GetConnectionState(c, out bool isSource, out PointType sourceConn, out bool isTarget, out PointType targetConn, out Control srcCtrlForTarget);
+                    controlSnap.IsConnectionSource = isSource;
+                    controlSnap.SourceConnector = sourceConn;
+                    controlSnap.IsConnectionTarget = isTarget;
+                    controlSnap.TargetConnector = targetConn;
+
+                    if (isSource)
+                    {
+                        // var props = GetPropertiesOrDefault(c); // Already got stackProps
+                        controlSnap.TargetControlName = stackProps.FloatTargetName;
+                        controlSnap.TargetAlignment = stackProps.FloatAlignment;
+
+                        if (!string.IsNullOrEmpty(controlSnap.TargetControlName) && !snapshot.Connections.ContainsKey(controlSnap.Name))
+                        {
+                            snapshot.Connections.Add(controlSnap.Name, new ConnectionInfo
+                            { TargetName = controlSnap.TargetControlName, Alignment = controlSnap.TargetAlignment });
+                        }
+                    }
+                    snapshot.VisibleControls.Add(controlSnap);
+                }
+                snapshot.IsValid = true; // Mark as successful if no exceptions
+            }
+            catch (Exception ex)
+            { LayoutLogger.Log($"ERROR Capturing DesignTime State: {ex.Message}\n{ex.StackTrace}"); snapshot.IsValid = false; }
+            return snapshot;
         }
 
         #endregion
 
-        #region Design-Time Drawing Logic & Helpers (Uses IDesignTimeDrawer)
+        #region Background Screen Drawing Task & Helpers (HwndExperimental Mode)
 
-        // Main painting logic now accepts the drawer interface
+        // Runs on Background Thread
+        private void DrawAdornersOnScreen_FromSnapshot(DesignTimeStateSnapshot snapshot)
+        {
+            if (snapshot == null || !snapshot.IsValid)
+            { Interlocked.Exchange(ref _screenDrawTaskRunning, 0); return; } // Reset flag
+
+            // LayoutLogger.Log($"DrawAdornersOnScreen: Starting screen drawing task."); // Noisy
+            IntPtr screenDC = IntPtr.Zero; Graphics screenGraphics = null;
+            try
+            {
+                //Thread.Sleep(200); // User's timing hack - adjust as needed
+                Thread.Sleep(20); // User's timing hack - adjust as needed
+
+                screenDC = NativeMethods.GetDC(IntPtr.Zero); // Screen DC
+                if (screenDC == IntPtr.Zero) { throw new Exception("Failed Screen DC."); }
+                screenGraphics = Graphics.FromHdc(screenDC);
+                if (screenGraphics == null) { throw new Exception("Failed Graphics from DC."); }
+
+                screenGraphics.SmoothingMode = SmoothingMode.AntiAlias; // Set desired quality
+
+                // Colors
+                Color stdConnectorBorder = Color.DimGray, stdConnectorFill = Color.FromArgb(240, 240, 240);
+                Color targetConnectorBorder = Color.DarkGray, targetConnectorFill = Color.FromArgb(220, 220, 220);
+                Color ConnectionLineColor = Color.DarkSlateBlue;
+                // Access instance colors (pass via snapshot if threading issues arise)
+                Color sourceIconColor = this.SourceConnectorConnectedColor;
+                Color targetIconColor = this.TargetConnectorConnectedColor;
+
+                // Create GDI objects locally using 'using' for proper disposal
+                using (Pen stdBorderPen = new Pen(stdConnectorBorder, DesignTimeLineWidth))
+                using (SolidBrush stdFillBrush = new SolidBrush(stdConnectorFill))
+                using (Pen targetBorderPen = new Pen(targetConnectorBorder, DesignTimeLineWidth))
+                using (SolidBrush targetFillBrush = new SolidBrush(targetConnectorFill))
+                using (Pen connectionLinePen = new Pen(ConnectionLineColor, DesignTimeLineWidth) { StartCap = LineCap.RoundAnchor, EndCap = LineCap.RoundAnchor, LineJoin = LineJoin.Round })
+                using (Pen sourceBorderPen = new Pen(stdConnectorBorder, DesignTimeLineWidth)) // Border for source icon
+                using (SolidBrush sourceDotBrush = new SolidBrush(sourceIconColor))
+                {
+                    ControlSnapshot selectedControlSnap = snapshot.VisibleControls.FirstOrDefault(c => c.Name == snapshot.SelectedControlName);
+
+                    // 1. Draw Connectors on Selected Child
+                    bool isBreakingFromSelected = 
+                        (snapshot.CurrentDragMode == DesignDragMode.Breaking && snapshot.DragSourceControlName == snapshot.SelectedControlName);
+                    if (selectedControlSnap != null && !isBreakingFromSelected)
+                    { DrawConnectionPointsOnScreen(screenGraphics, snapshot.PanelScreenLocation, selectedControlSnap, stdBorderPen, stdFillBrush, sourceBorderPen, sourceDotBrush, DesignTimeConnectorOffset, false); }
+
+                    // 2. Draw Existing Connections
+                    DrawExistingConnectionsOnScreen(screenGraphics, snapshot);
+
+                    // 3. Draw Drag Feedback
+                    if (snapshot.CurrentDragMode != DesignDragMode.None)
+                    {
+                        ControlSnapshot dragSourceSnap = snapshot.VisibleControls.FirstOrDefault(c => c.Name == snapshot.DragSourceControlName);
+                        ControlSnapshot breakTargetSnap = snapshot.VisibleControls.FirstOrDefault(c => c.Name == snapshot.BreakTargetControlName);
+
+                        if (snapshot.CurrentDragMode == DesignDragMode.Connecting && dragSourceSnap != null)
+                        {
+                            // Potential target points
+                            foreach (var controlSnap in snapshot.VisibleControls)
+                            {
+                                if (controlSnap.Name != snapshot.DragSourceControlName && controlSnap.IsVisible)
+                                { DrawConnectionPointsOnScreen(screenGraphics, snapshot.PanelScreenLocation, controlSnap, targetBorderPen, targetFillBrush, null, null, DesignTimeConnectorOffset, true); }
+                            }
+                            // Drag line
+                            DrawDragLineOnScreen(screenGraphics, snapshot.PanelScreenLocation, dragSourceSnap, snapshot.DragStartConnectorType, snapshot.DragCurrentScreenPoint, Color.Blue, DesignTimeLineWidth, DesignTimeConnectorOffset);
+                        }
+                        else if (snapshot.CurrentDragMode == DesignDragMode.Breaking && breakTargetSnap != null)
+                        { DrawDragLineOnScreen(screenGraphics, snapshot.PanelScreenLocation, breakTargetSnap, snapshot.BreakTargetConnectorType, snapshot.DragCurrentScreenPoint, Color.Red, DesignTimeLineWidth, DesignTimeConnectorOffset); }
+                    }
+                } // Dispose pens/brushes
+            }
+            catch (Exception ex) { LayoutLogger.Log($"DrawAdornersOnScreen: Error: {ex.Message}\n{ex.StackTrace}"); }
+            finally
+            {
+                screenGraphics?.Dispose(); // Dispose Graphics object
+                if (screenDC != IntPtr.Zero) { NativeMethods.ReleaseDC(IntPtr.Zero, screenDC); } // Release DC
+                Interlocked.Exchange(ref _screenDrawTaskRunning, 0); // Reset flag
+                                                                     // LayoutLogger.Log($"DrawAdornersOnScreen: Task finished."); // Noisy
+            }
+        }
+
+        // --- Helper methods that draw on SCREEN graphics using snapshot ---
+
+        // Draws connection points for ONE control onto the screen graphics
+        private void DrawConnectionPointsOnScreen(Graphics screenGraphics, Point panelScreenOrigin, ControlSnapshot controlSnap,
+                                                 Pen borderPen, Brush fillBrush, Pen sourceBorderPen, Brush sourceDotBrush,
+                                                 int outwardOffset, bool forceStandard)
+        {
+            if (controlSnap == null) return;
+            var connectorRectsPanel = GetConnectorRects(controlSnap.Bounds, outwardOffset); // Panel relative
+
+            foreach (var kvp in connectorRectsPanel)
+            {
+                PointType currentPointType = kvp.Key; Rectangle rectPanel = kvp.Value; if (rectPanel.IsEmpty) continue;
+                // Convert panel-relative rect to SCREEN coordinates
+                Rectangle rectScreen = new Rectangle(panelScreenOrigin.X + rectPanel.Left, panelScreenOrigin.Y + rectPanel.Top, rectPanel.Width, rectPanel.Height);
+
+                bool drawnSpecial = false;
+                if (!forceStandard)
+                {
+                    if (controlSnap.IsConnectionSource && currentPointType == controlSnap.SourceConnector && sourceDotBrush != null && sourceBorderPen != null)
+                    { screenGraphics.FillEllipse(sourceDotBrush, rectScreen); screenGraphics.DrawEllipse(sourceBorderPen, rectScreen); drawnSpecial = true; }
+                    else if (controlSnap.IsConnectionTarget && currentPointType == controlSnap.TargetConnector)
+                    {
+                        using (var arrowPen = new Pen(this.TargetConnectorConnectedColor, DesignTimeLineWidth * 1.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                        { DrawTargetArrowOnScreen(screenGraphics, rectScreen, arrowPen, currentPointType); }
+                        drawnSpecial = true;
+                    } // Pass screen rect
+                }
+                if (!drawnSpecial && fillBrush != null && borderPen != null)
+                { screenGraphics.FillEllipse(fillBrush, rectScreen); screenGraphics.DrawEllipse(borderPen, rectScreen); }
+            }
+        }
+
+        // Draws just the target arrow shape onto screen graphics at the given screen rectangle
+        private void DrawTargetArrowOnScreen(Graphics screenGraphics, Rectangle rectScreen, Pen arrowPen, PointType direction)
+        {
+            if (rectScreen.IsEmpty) return; Point centerScreen = GetCenter(rectScreen); // Center is screen coords
+            int arrowLength = (int)(DesignTimeConnectorSize * 0.70f), arrowHalfWidth = (int)(DesignTimeConnectorSize * 0.30f);
+            Point pTip, pWingLeft, pWingRight; // Screen coords
+            switch (direction)
+            { /* Calculation logic using centerScreen - same formulas as before */
+                case PointType.Top: pTip = new Point(centerScreen.X, centerScreen.Y + arrowLength / 2); pWingLeft = new Point(centerScreen.X - arrowHalfWidth, centerScreen.Y - arrowLength / 2); pWingRight = new Point(centerScreen.X + arrowHalfWidth, centerScreen.Y - arrowLength / 2); break;
+                case PointType.Bottom: pTip = new Point(centerScreen.X, centerScreen.Y - arrowLength / 2); pWingLeft = new Point(centerScreen.X - arrowHalfWidth, centerScreen.Y + arrowLength / 2); pWingRight = new Point(centerScreen.X + arrowHalfWidth, centerScreen.Y + arrowLength / 2); break;
+                case PointType.Left: pTip = new Point(centerScreen.X + arrowLength / 2, centerScreen.Y); pWingLeft = new Point(centerScreen.X - arrowLength / 2, centerScreen.Y - arrowHalfWidth); pWingRight = new Point(centerScreen.X - arrowLength / 2, centerScreen.Y + arrowHalfWidth); break;
+                case PointType.Right: default: pTip = new Point(centerScreen.X - arrowLength / 2, centerScreen.Y); pWingLeft = new Point(centerScreen.X + arrowLength / 2, centerScreen.Y - arrowHalfWidth); pWingRight = new Point(centerScreen.X + arrowLength / 2, centerScreen.Y + arrowHalfWidth); break;
+            }
+            screenGraphics.DrawLine(arrowPen, pWingLeft, pTip); screenGraphics.DrawLine(arrowPen, pWingRight, pTip);
+        }
+
+        // Draws existing connections onto screen graphics using snapshot data
+        // Draws existing connections onto screen graphics using snapshot data
+        // Draws existing connections onto screen graphics using snapshot data
+        // Draws existing connections onto screen graphics using snapshot data
+        private void DrawExistingConnectionsOnScreen(Graphics screenGraphics, DesignTimeStateSnapshot snapshot)
+        {
+            if (snapshot?.Connections == null) return;
+            Point panelOrigin = snapshot.PanelScreenLocation;
+            var controlsDic = snapshot.VisibleControls.ToDictionary(cs => cs.Name);
+
+            using (Pen linePen = new Pen(ConnectionLineColor, DesignTimeLineWidth) { StartCap = LineCap.RoundAnchor, EndCap = LineCap.RoundAnchor, LineJoin = LineJoin.Round })
+            using (Pen sourceBorderPen = new Pen(Color.DimGray, DesignTimeLineWidth))
+            using (SolidBrush sourceDotBrush = new SolidBrush(this.SourceConnectorConnectedColor))
+            {
+                foreach (var kvpConnection in snapshot.Connections)
+                {
+                    string sourceName = kvpConnection.Key;
+                    ConnectionInfo connInfo = kvpConnection.Value;
+                    string targetName = connInfo.TargetName;
+
+                    if (controlsDic.TryGetValue(sourceName, out ControlSnapshot sourceSnap) &&
+                        controlsDic.TryGetValue(targetName, out ControlSnapshot targetSnap))
+                    {
+                        // --- Determine ICON Connection Points (Panel Relative) ---
+                        // We still need these to know where to draw the dot and arrow icons,
+                        // even though the line starts from the TopLeft.
+                        PointType targetIconPointType = MapAlignmentToConnector(connInfo.Alignment);
+                        PointType sourceIconPointType = GetOppositeConnectorType(targetIconPointType);
+                        if (sourceIconPointType == PointType.None) sourceIconPointType = GetClosestConnectionPointType(sourceSnap.Bounds, GetCenter(targetSnap.Bounds));
+                        if (targetIconPointType == PointType.None)
+                        {
+                            LayoutLogger.Log($"Skipping connection {sourceName}->{targetName}: Invalid Target Alignment {connInfo.Alignment}");
+                            continue; // Cannot draw line or target icon without valid target type
+                        }
+
+                        var sourceRectsPanel = GetConnectorRects(sourceSnap.Bounds, DesignTimeConnectorOffset);
+                        var targetRectsPanel = GetConnectorRects(targetSnap.Bounds, DesignTimeConnectorOffset);
+
+                        Rectangle sourceIconConnRectPanel, targetIconConnRectPanel;
+                        Point targetIconCenterPanel; // Only need center for target line end
+
+                        if (!sourceRectsPanel.TryGetValue(sourceIconPointType, out sourceIconConnRectPanel) ||
+                            !targetRectsPanel.TryGetValue(targetIconPointType, out targetIconConnRectPanel) ||
+                            sourceIconConnRectPanel.IsEmpty || targetIconConnRectPanel.IsEmpty)
+                        {
+                            LayoutLogger.Log($"Skipping connection {sourceName}->{targetName}: Could not get valid ICON connector rects.");
+                            continue; // Skip if icon points invalid
+                        }
+                        targetIconCenterPanel = GetCenter(targetIconConnRectPanel);
+
+
+                        // --- Calculate Orthogonal Path (Using NEW Function) ---
+                        Point sourceTopLeftPanel = sourceSnap.Bounds.Location; // Get source TopLeft
+
+                        // *** CALL THE NEW PATH FUNCTION ***
+                        List<Point> pathPanel = CalculateOrthogonalPath_TopLeftSource(
+                            sourceTopLeftPanel,         // Start from source TopLeft
+                            targetIconCenterPanel,      // End at TARGET connector center
+                            targetIconPointType,        // Use TARGET connector type for routing logic
+                            DesignTimeLineRoutingMargin // Pass margin
+                        );
+
+
+                        // --- Logging for Debugging ---
+                        LayoutLogger.Log($"Path Calc (TL Source) for {sourceName}->{targetName}: TargetType={targetIconPointType}, Points={(pathPanel?.Count ?? 0)}.");
+
+                        // --- Draw Path and Icons on Screen ---
+                        if (pathPanel != null && pathPanel.Count >= 2)
+                        {
+                            Point[] pathScreen = pathPanel.Select(p => new Point(panelOrigin.X + p.X, panelOrigin.Y + p.Y)).ToArray();
+                            try
+                            {
+                                screenGraphics.DrawLines(linePen, pathScreen);
+                                LayoutLogger.Log($" -> DrawLines called for {sourceName}->{targetName}");
+                            }
+                            catch (Exception ex) { LayoutLogger.Log($" -> DrawLines FAILED for {sourceName}->{targetName}: {ex.Message}"); }
+
+                            // --- Draw Icons on Screen (at their original connector locations) ---
+                            // Source Dot (at determined sourceIconPointType location)
+                            Rectangle sourceIconRectScreen = new Rectangle(panelOrigin.X + sourceIconConnRectPanel.X, panelOrigin.Y + sourceIconConnRectPanel.Y, sourceIconConnRectPanel.Width, sourceIconConnRectPanel.Height);
+                            screenGraphics.FillEllipse(sourceDotBrush, sourceIconRectScreen);
+                            screenGraphics.DrawEllipse(sourceBorderPen, sourceIconRectScreen);
+
+                            // Target Arrow (at determined targetIconPointType location)
+                            Rectangle targetIconRectScreen = new Rectangle(panelOrigin.X + targetIconConnRectPanel.X, panelOrigin.Y + targetIconConnRectPanel.Y, targetIconConnRectPanel.Width, targetIconConnRectPanel.Height);
+                            using (var arrowPen = new Pen(this.TargetConnectorConnectedColor, DesignTimeLineWidth * 1.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                            { DrawTargetArrowOnScreen(screenGraphics, targetIconRectScreen, arrowPen, targetIconPointType); }
+                        }
+                        else { LayoutLogger.Log($" -> DrawLines SKIPPED for {sourceName}->{targetName} due to invalid path."); }
+                    }
+                }
+            }
+        } // End Method
+        private void DrawDragLineOnScreen(Graphics screenGraphics, Point panelScreenOrigin, ControlSnapshot startControlSnap, PointType startPointType, Point currentScreenPoint, // End is already screen
+                                         Color lineColor, float lineWidth, int outwardOffset)
+        {
+            if (startControlSnap == null || startPointType == PointType.None) return;
+            var startRectsPanel = GetConnectorRects(startControlSnap.Bounds, outwardOffset);
+            if (startRectsPanel.TryGetValue(startPointType, out var startConnRectPanel) && !startConnRectPanel.IsEmpty)
+            {
+                Point startPtPanel = GetCenter(startConnRectPanel);
+                // Convert start point to screen coordinates
+                Point startPtScreen = new Point(panelScreenOrigin.X + startPtPanel.X, panelScreenOrigin.Y + startPtPanel.Y);
+                Point endPtScreen = currentScreenPoint; // End point is already screen
+                using (Pen tempPen = new Pen(lineColor, lineWidth) { DashStyle = DashStyle.Dash }) { screenGraphics.DrawLine(tempPen, startPtScreen, endPtScreen); } // Draw on screen
+            }
+        }
+        #endregion
+
+        #region Methods for Direct Drawing Mode (Using IDesignTimeDrawer)
+
+        // This method contains the core logic for drawing directly onto the panel's Graphics context
+        // It uses the IDesignTimeDrawer interface passed to it.
         private void PaintDesignTimeVisuals(IDesignTimeDrawer drawer)
         {
-            // All drawing settings and logic remain the same,
-            // EXCEPT calls to g.Draw... are replaced with drawer.Draw...
+            // LayoutLogger.Log("PaintDesignTimeVisuals using Direct Drawer"); // Example Log
 
             // --- Define Colors ---
             Color stdConnectorBorder = Color.DimGray;
-            Color stdConnectorFill = Color.FromArgb(240, 240, 240); // Light gray
+            Color stdConnectorFill = Color.FromArgb(240, 240, 240);
             Color targetConnectorBorder = Color.DarkGray;
-            Color targetConnectorFill = Color.FromArgb(220, 220, 220); // Slightly darker gray
+            Color targetConnectorFill = Color.FromArgb(220, 220, 220);
             Color ConnectionLineColor = Color.DarkSlateBlue;
-            // SourceConnectorConnectedColor and TargetConnectorConnectedColor defined as fields
+            // SourceConnectorConnectedColor/TargetConnectorConnectedColor are fields
 
             // --- Get Selection Info ---
             Control selectedChild = null;
-            if (_selectionServiceDT != null && _selectionServiceDT.PrimarySelection is Control sc && sc.Parent == this)
-            {
-                selectedChild = sc;
-            }
+            if (_selectionServiceDT != null && _selectionServiceDT.PrimarySelection is Control sc && sc.Parent == this) { selectedChild = sc; }
 
-            // --- 1. Draw Connectors on Currently Selected Child (if any) ---
+            // --- 1. Draw Connectors on Currently Selected Child ---
             if (selectedChild != null)
             {
                 bool isBreakingFromSelected = (_currentDragModeDT == DesignDragMode.Breaking && _sourceControlDT == selectedChild);
                 if (!isBreakingFromSelected)
                 {
-                    DrawConnectionPointsForControl(drawer, selectedChild, // Pass drawer
-                                                   stdConnectorBorder, stdConnectorFill,
-                                                   DesignTimeLineWidth, DesignTimeConnectorOffset);
+                    DrawConnectionPointsForControl(drawer, selectedChild, stdConnectorBorder, stdConnectorFill, DesignTimeLineWidth, DesignTimeConnectorOffset); // Uses Drawer
                 }
             }
 
-            // --- 2. Draw Existing Connections (Orthogonal Lines & Specific Icons) ---
-            DrawExistingConnections(drawer, ConnectionLineColor, DesignTimeLineWidth, // Pass drawer
-                                    SourceConnectorConnectedColor, TargetConnectorConnectedColor,
-                                    stdConnectorBorder, stdConnectorFill, // Pass standard colors
-                                    DesignTimeConnectorOffset);
+            // --- 2. Draw Existing Connections ---
+            DrawExistingConnections(drawer, ConnectionLineColor, DesignTimeLineWidth, SourceConnectorConnectedColor, TargetConnectorConnectedColor, stdConnectorBorder, stdConnectorFill, DesignTimeConnectorOffset); // Uses Drawer
 
-
-            // --- 3. Draw Drag Feedback (if a drag is in progress) ---
+            // --- 3. Draw Drag Feedback ---
             if (_currentDragModeDT != DesignDragMode.None)
             {
                 if (_currentDragModeDT == DesignDragMode.Connecting && _sourceControlDT != null)
                 {
-                    // Draw potential target points on other controls
                     foreach (Control child in this.Controls.OfType<Control>())
                     {
                         if (child != _sourceControlDT && child.Visible)
-                        {
-                            DrawConnectionPointsForControl(drawer, child, // Pass drawer
-                                                           targetConnectorBorder, targetConnectorFill,
-                                                           DesignTimeLineWidth, DesignTimeConnectorOffset,
-                                                           forceStandard: true); // Force standard circle
-                        }
-                    }
-                    // Draw the direct dashed drag line (Blue)
-                    DrawDragLine(drawer, _sourceControlDT, _startConnectorTypeDT, _dragCurrentPointScreenDT, // Pass drawer
-                                 Color.Blue, DesignTimeLineWidth, DesignTimeConnectorOffset);
+                        { DrawConnectionPointsForControl(drawer, child, targetConnectorBorder, targetConnectorFill, DesignTimeLineWidth, DesignTimeConnectorOffset, true); }
+                    } // Uses Drawer
+                    DrawDragLine(drawer, _sourceControlDT, _startConnectorTypeDT, _dragCurrentPointScreenDT, Color.Blue, DesignTimeLineWidth, DesignTimeConnectorOffset); // Uses Drawer
                 }
                 else if (_currentDragModeDT == DesignDragMode.Breaking && _breakLinkTargetControlDT != null)
                 {
-                    // Draw the direct dashed drag line (Red)
-                    DrawDragLine(drawer, _breakLinkTargetControlDT, _breakLinkTargetConnectorDT, _dragCurrentPointScreenDT, // Pass drawer
-                                 Color.Red, DesignTimeLineWidth, DesignTimeConnectorOffset);
+                    DrawDragLine(drawer, _breakLinkTargetControlDT, _breakLinkTargetConnectorDT, _dragCurrentPointScreenDT, Color.Red, DesignTimeLineWidth, DesignTimeConnectorOffset); // Uses Drawer
                 }
             }
         }
 
-        // --- Drawing Helper: Connectors for a single control using IDesignTimeDrawer ---
+        // --- Keep IDesignTimeDrawer versions of helpers for Direct Mode ---
+
+        // Helper: Connectors for a single control using IDesignTimeDrawer
         private void DrawConnectionPointsForControl(IDesignTimeDrawer drawer, Control c, Color borderColor, Color fillColor, float lineWidth, int outwardOffset, bool forceStandard = false)
         {
             if (c == null || !c.Visible) return;
+            var bounds = GetControlBoundsInPanel(c); var connectorRectsPanel = GetConnectorRects(bounds, outwardOffset);
+            GetConnectionState(c, out bool isSource, out PointType sourcePoint, out bool isTarget, out PointType targetPoint, out _);
 
-            var bounds = GetControlBoundsInPanel(c); // Still use panel-relative bounds for calculation
-            var connectorRects = GetConnectorRects(bounds, outwardOffset); // Calculate rects relative to panel
-
-            bool isSource = false; PointType sourcePoint = PointType.None;
-            bool isTarget = false; PointType targetPoint = PointType.None;
-            Control sourceForTargetArrow = null;
-
-            if (!forceStandard)
-                GetConnectionState(c, out isSource, out sourcePoint, out isTarget, out targetPoint, out sourceForTargetArrow);
-
-            // Use Pens and Brushes locally - IMPORTANT for GDI object disposal
-            using (var borderPen = new Pen(borderColor, lineWidth))
-            using (var fillBrush = new SolidBrush(fillColor))
-            using (var sourceDotBrush = new SolidBrush(SourceConnectorConnectedColor)) // Use field color
-            // Create arrow pen inside target check for correct context
+            using (var borderPen = new Pen(borderColor, lineWidth)) using (var fillBrush = new SolidBrush(fillColor))
+            using (var sourceDotBrush = new SolidBrush(SourceConnectorConnectedColor))
             {
-                foreach (var kvp in connectorRects)
+                foreach (var kvp in connectorRectsPanel)
                 {
-                    PointType currentPointType = kvp.Key;
-                    Rectangle rect = kvp.Value; // This rect is relative to the StackLayout panel
-                    if (rect.IsEmpty) continue;
-
-                    bool drawnSpecial = false;
-                    if (!forceStandard)
+                    PointType currentPointType = kvp.Key; Rectangle rect = kvp.Value; if (rect.IsEmpty) continue;
+                    bool drawnSpecial = false; if (!forceStandard)
                     {
-                        if (isSource && currentPointType == sourcePoint)
-                        {
-                            // Draw Source Dot via Drawer
-                            drawer.FillEllipse(sourceDotBrush, rect); // Use drawer
-                            drawer.DrawEllipse(borderPen, rect);      // Use drawer
-                            drawnSpecial = true;
-                        }
-                        else if (isTarget && currentPointType == targetPoint)
-                        {
-                            // Draw Target Arrow via Drawer (logic inside this call)
-                            // Create specific arrow pen here
-                            using (var targetArrowPen = new Pen(TargetConnectorConnectedColor, lineWidth * 1.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                            {
-                                DrawTargetConnectedIcon(drawer, rect, targetArrowPen, currentPointType); // Pass drawer
-                            }
-                            drawnSpecial = true;
-                        }
+                        if (isSource && currentPointType == sourcePoint) { drawer.FillEllipse(sourceDotBrush, rect); drawer.DrawEllipse(borderPen, rect); drawnSpecial = true; }
+                        else if (isTarget && currentPointType == targetPoint) { using (var arrowPen = new Pen(TargetConnectorConnectedColor, lineWidth * 1.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round }) { DrawTargetConnectedIcon(drawer, rect, arrowPen, currentPointType); } drawnSpecial = true; }
                     }
-
-                    if (!drawnSpecial) // Draw standard empty circle
-                    {
-                        drawer.FillEllipse(fillBrush, rect); // Use drawer
-                        drawer.DrawEllipse(borderPen, rect);   // Use drawer
-                    }
+                    if (!drawnSpecial) { drawer.FillEllipse(fillBrush, rect); drawer.DrawEllipse(borderPen, rect); }
                 }
-            } // Dispose pens/brushes
-        }
-
-        // --- Drawing Helper: Dot for connected source ---
-        // (This helper isn't strictly needed if logic is in DrawConnectionPointsForControl, but kept for clarity)
-        // It would need to accept IDesignTimeDrawer if called directly.
-        private void DrawSourceConnectedIcon(IDesignTimeDrawer drawer, Rectangle rect, Color borderColor, Color dotColor, float lineWidth)
-        {
-            if (rect.IsEmpty) return;
-            using (var borderPen = new Pen(borderColor, lineWidth))
-            using (var dotBrush = new SolidBrush(dotColor))
-            {
-                drawer.FillEllipse(dotBrush, rect); // Fill colored circle via drawer
-                drawer.DrawEllipse(borderPen, rect); // Draw border via drawer
             }
         }
 
-
-        // --- Drawing Helper: Arrow ONLY via Drawer ---
+        // Helper: Arrow ONLY via Drawer
         private void DrawTargetConnectedIcon(IDesignTimeDrawer drawer, Rectangle rectSource, Pen arrowPen, PointType direction)
         {
-            if (rectSource.IsEmpty) return;
-
-            Point center = GetCenter(rectSource); // Calculate center relative to StackLayout
-
-            // Arrow geometry calculation
-            int arrowLength = (int)(DesignTimeConnectorSize * 0.70f);
-            int arrowHalfWidth = (int)(DesignTimeConnectorSize * 0.30f);
-            Point pTip, pWingLeft, pWingRight;
-
-            switch (direction) // Calculate points relative to StackLayout
-            {
+            if (rectSource.IsEmpty) return; Point center = GetCenter(rectSource);
+            int arrowLength = (int)(DesignTimeConnectorSize * 0.70f), arrowHalfWidth = (int)(DesignTimeConnectorSize * 0.30f); Point pTip, pWingLeft, pWingRight;
+            switch (direction)
+            { /* Calculation logic using center */
                 case PointType.Top: pTip = new Point(center.X, center.Y + arrowLength / 2); pWingLeft = new Point(center.X - arrowHalfWidth, center.Y - arrowLength / 2); pWingRight = new Point(center.X + arrowHalfWidth, center.Y - arrowLength / 2); break;
                 case PointType.Bottom: pTip = new Point(center.X, center.Y - arrowLength / 2); pWingLeft = new Point(center.X - arrowHalfWidth, center.Y + arrowLength / 2); pWingRight = new Point(center.X + arrowHalfWidth, center.Y + arrowLength / 2); break;
                 case PointType.Left: pTip = new Point(center.X + arrowLength / 2, center.Y); pWingLeft = new Point(center.X - arrowLength / 2, center.Y - arrowHalfWidth); pWingRight = new Point(center.X - arrowLength / 2, center.Y + arrowHalfWidth); break;
                 case PointType.Right: default: pTip = new Point(center.X - arrowLength / 2, center.Y); pWingLeft = new Point(center.X + arrowLength / 2, center.Y - arrowHalfWidth); pWingRight = new Point(center.X + arrowLength / 2, center.Y + arrowHalfWidth); break;
             }
-
-            // Draw the arrow lines using the passed drawer and arrowPen
-            drawer.DrawLine(arrowPen, pWingLeft, pTip);
-            drawer.DrawLine(arrowPen, pWingRight, pTip);
+            drawer.DrawLine(arrowPen, pWingLeft, pTip); drawer.DrawLine(arrowPen, pWingRight, pTip); // Use drawer
         }
 
-
-        // --- Drawing Helper: Existing connections via Drawer (with overlap detection) ---
+        // Helper: Existing connections via Drawer (with TopLeft source path logic) - FOR DIRECT MODE
         private void DrawExistingConnections(IDesignTimeDrawer drawer, Color lineColor, float lineWidth, Color sourceDotColor, Color targetArrowColor, Color defaultBorder, Color defaultFill, int outwardOffset)
         {
             if (_designerHostDT == null || _designerHostDT.Container == null) return;
 
-            int linesDrawn = 0;
-
-            // Create GDI objects locally and dispose them
             using (Pen linePen = new Pen(lineColor, lineWidth) { StartCap = LineCap.RoundAnchor, EndCap = LineCap.RoundAnchor, LineJoin = LineJoin.Round })
-            using (Pen borderPen = new Pen(defaultBorder, lineWidth)) // Pen for icon borders
-            using (SolidBrush sourceDotBrush = new SolidBrush(sourceDotColor))
+            using (Pen borderPen = new Pen(defaultBorder, lineWidth)) // For icon borders
+            using (SolidBrush sourceDotBrush = new SolidBrush(sourceDotColor)) // For source icon fill
             {
                 foreach (Control source in this.Controls.OfType<Control>().Where(c => c.Visible))
                 {
@@ -532,191 +694,132 @@ namespace SharpBrowser.Controls
                     if (sourceProps.IsFloating && !string.IsNullOrEmpty(sourceProps.FloatTargetName))
                     {
                         Control target = null;
-                        try { target = _designerHostDT.Container.Components[sourceProps.FloatTargetName] as Control; } catch { target = null; }
+                        try { target = _designerHostDT.Container.Components[sourceProps.FloatTargetName] as Control; }
+                        catch { target = null; }
 
                         if (target != null && target.Parent == this && target.Visible)
                         {
                             var sourceBounds = GetControlBoundsInPanel(source);
                             var targetBounds = GetControlBoundsInPanel(target);
 
-                            // Initial Point Type Determination
-                            PointType initialTargetPointType = MapAlignmentToConnector(sourceProps.FloatAlignment);
-                            PointType initialSourcePointType = GetOppositeConnectorType(initialTargetPointType);
-                            if (initialSourcePointType == PointType.None) initialSourcePointType = GetClosestConnectionPointType(sourceBounds, GetCenter(targetBounds));
-                            if (initialTargetPointType == PointType.None) initialTargetPointType = GetClosestConnectionPointType(targetBounds, GetCenter(sourceBounds));
+                            // --- Determine ICON Connection Points (Panel Relative) ---
+                            PointType targetIconPointType = MapAlignmentToConnector(sourceProps.FloatAlignment);
+                            PointType sourceIconPointType = GetOppositeConnectorType(targetIconPointType);
+                            if (sourceIconPointType == PointType.None) sourceIconPointType = GetClosestConnectionPointType(sourceBounds, GetCenter(targetBounds));
+                            if (targetIconPointType == PointType.None)
+                            {
+                                // LayoutLogger.Log($"Skipping Direct connection {source.Name}->{target.Name}: Invalid Target Alignment {sourceProps.FloatAlignment}");
+                                continue; // Cannot draw line or target icon
+                            }
 
-                            var sourceRects = GetConnectorRects(sourceBounds, outwardOffset);
-                            var targetRects = GetConnectorRects(targetBounds, outwardOffset);
+                            var sourceRectsPanel = GetConnectorRects(sourceBounds, outwardOffset);
+                            var targetRectsPanel = GetConnectorRects(targetBounds, outwardOffset);
 
-                            // Get initial points
-                            Point initialStartPt = Point.Empty, initialEndPt = Point.Empty;
-                            if (sourceRects.TryGetValue(initialSourcePointType, out Rectangle initSourceRect)) initialStartPt = GetCenter(initSourceRect);
-                            if (targetRects.TryGetValue(initialTargetPointType, out Rectangle initTargetRect)) initialEndPt = GetCenter(initTargetRect);
+                            Rectangle sourceIconConnRectPanel, targetIconConnRectPanel;
+                            Point targetIconCenterPanel;
 
-                            // Overlap Detection & Rerouting
-                            PointType finalSourcePointType = initialSourcePointType;
-                            PointType finalTargetPointType = initialTargetPointType;
-                            bool rerouted = false;
+                            if (!sourceRectsPanel.TryGetValue(sourceIconPointType, out sourceIconConnRectPanel) ||
+                                !targetRectsPanel.TryGetValue(targetIconPointType, out targetIconConnRectPanel) ||
+                                sourceIconConnRectPanel.IsEmpty || targetIconConnRectPanel.IsEmpty)
+                            {
+                                // LayoutLogger.Log($"Skipping Direct connection {source.Name}->{target.Name}: Could not get valid ICON connector rects.");
+                                continue;
+                            }
+                            targetIconCenterPanel = GetCenter(targetIconConnRectPanel);
 
-                            if ((initialSourcePointType == PointType.Left && initialTargetPointType == PointType.Right && initialStartPt.X >= initialEndPt.X) ||
-                                (initialSourcePointType == PointType.Right && initialTargetPointType == PointType.Left && initialStartPt.X <= initialEndPt.X))
-                            { finalSourcePointType = PointType.Top; finalTargetPointType = PointType.Top; rerouted = true; LayoutLogger.Log($"       - Rerouting HORIZONTAL overlap for {source.Name}->{target.Name}. Using TOP connectors."); }
-                            else if ((initialSourcePointType == PointType.Top && initialTargetPointType == PointType.Bottom && initialStartPt.Y >= initialEndPt.Y) ||
-                                     (initialSourcePointType == PointType.Bottom && initialTargetPointType == PointType.Top && initialStartPt.Y <= initialEndPt.Y))
-                            { finalSourcePointType = PointType.Left; finalTargetPointType = PointType.Left; rerouted = true; LayoutLogger.Log($"       - Rerouting VERTICAL overlap for {source.Name}->{target.Name}. Using LEFT connectors."); }
+                            // --- Calculate Orthogonal Path (Using TopLeftSource Function) ---
+                            Point sourceTopLeftPanel = sourceBounds.Location; // Source TopLeft
 
-                            // Get Final Connection Points
-                            Rectangle finalSourceConnRect, finalTargetConnRect; Point finalStartPt, finalEndPt;
-                            if (!sourceRects.TryGetValue(finalSourcePointType, out finalSourceConnRect) || !targetRects.TryGetValue(finalTargetPointType, out finalTargetConnRect) || finalSourceConnRect.IsEmpty || finalTargetConnRect.IsEmpty)
-                            { LayoutLogger.Log($"     - XXX FAILED DrawExistingConnections: Cannot get valid FINAL connector Rects for {source.Name}->{target.Name} (Types: {finalSourcePointType}/{finalTargetPointType}). Rerouted={rerouted}"); continue; }
+                            // *** CALL THE NEW PATH FUNCTION ***
+                            List<Point> pathPanel = CalculateOrthogonalPath_TopLeftSource(
+                                sourceTopLeftPanel,
+                                targetIconCenterPanel,
+                                targetIconPointType,
+                                DesignTimeLineRoutingMargin
+                            );
 
-                            finalStartPt = GetCenter(finalSourceConnRect); finalEndPt = GetCenter(finalTargetConnRect);
+                            // --- Logging for Debugging ---
+                            // LayoutLogger.Log($"Direct Path Calc (TL Source) for {source.Name}->{target.Name}: TargetType={targetIconPointType}, Points={(pathPanel?.Count ?? 0)}.");
 
-                            // Calculate Orthogonal Path
-                            List<Point> path = CalculateOrthogonalPath(finalStartPt, finalEndPt, finalSourcePointType, finalTargetPointType, DesignTimeLineRoutingMargin);
-
-                            if (path != null && path.Count >= 2)
+                            // --- Draw Path and Icons using the Drawer ---
+                            if (pathPanel != null && pathPanel.Count >= 2)
                             {
                                 try
                                 {
-                                    // Draw Lines via Drawer
-                                    drawer.DrawLines(linePen, path.ToArray());
-                                    linesDrawn++;
+                                    // Draw Path using Drawer
+                                    drawer.DrawLines(linePen, pathPanel.ToArray());
 
-                                    // Draw Icons via Drawer
-                                    drawer.FillEllipse(sourceDotBrush, finalSourceConnRect);
-                                    drawer.DrawEllipse(borderPen, finalSourceConnRect);
+                                    // Draw Icons using Drawer (at their original connector locations)
+                                    // Source Dot
+                                    drawer.FillEllipse(sourceDotBrush, sourceIconConnRectPanel);
+                                    drawer.DrawEllipse(borderPen, sourceIconConnRectPanel);
 
-                                    using (var targetArrowPen = new Pen(targetArrowColor, lineWidth * 1.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                                    // Target Arrow
+                                    using (var arrowPen = new Pen(targetArrowColor, DesignTimeLineWidth * 1.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
                                     {
-                                        DrawTargetConnectedIcon(drawer, finalTargetConnRect, targetArrowPen, finalTargetPointType); // Pass drawer
+                                        DrawTargetConnectedIcon(drawer, targetIconConnRectPanel, arrowPen, targetIconPointType); // Pass drawer
                                     }
                                 }
-                                catch (Exception drawEx) { LayoutLogger.Log($"       - XXX ERROR during Drawer DrawLines/Icons: {drawEx.Message} XXX"); }
+                                catch (Exception drawEx) { LayoutLogger.Log($"ERROR Direct DrawExistingConnections DrawLines/Icons: {drawEx.Message}"); }
                             }
-                            // else { /* Log path calc failure */ }
-                        }
-                        // else { /* Log target not found */ }
-                    }
-                }
-            } // Dispose base pens/brushes
-        }
-
-        // --- Helper: Calculate Orthogonal Path ---
-        // (Implementation remains the same as previous version - calculates points)
-        private List<Point> CalculateOrthogonalPath(Point startPt, Point endPt, PointType startType, PointType endType, int margin)
-        {
-             if (startPt == endPt || startType == PointType.None || endType == PointType.None || margin <= 0)
-             {
-                 return new List<Point> { startPt, endPt };
-             }
-
-             var path = new List<Point>();
-             path.Add(startPt); // 1. Start
-
-             Point p1 = startPt; // Outward from source
-             Point p2 = endPt;   // Outward from target
-
-             // 2. Calculate p1
-             switch (startType) { case PointType.Top: p1.Y -= margin; break; case PointType.Bottom: p1.Y += margin; break; case PointType.Left: p1.X -= margin; break; case PointType.Right: p1.X += margin; break; }
-             // 3. Calculate p2
-             switch (endType) { case PointType.Top: p2.Y -= margin; break; case PointType.Bottom: p2.Y += margin; break; case PointType.Left: p2.X -= margin; break; case PointType.Right: p2.X += margin; break; }
-
-             path.Add(p1); // 4. Add outward source
-
-             // 5. Calculate intermediate corner points
-             bool startIsVertical = (startType == PointType.Top || startType == PointType.Bottom);
-             bool endIsVertical = (endType == PointType.Top || endType == PointType.Bottom);
-
-             if (startIsVertical != endIsVertical) // 'L' shape
-             { if (startIsVertical) path.Add(new Point(p2.X, p1.Y)); else path.Add(new Point(p1.X, p2.Y)); }
-             else // 'U' shape
-             { if (startIsVertical) { int midX = (p1.X + p2.X) / 2; path.Add(new Point(midX, p1.Y)); path.Add(new Point(midX, p2.Y)); } else { int midY = (p1.Y + p2.Y) / 2; path.Add(new Point(p1.X, midY)); path.Add(new Point(p2.X, midY)); } }
-
-             path.Add(p2); // 6. Add outward target
-             path.Add(endPt); // 7. End
-
-             // 8. Optimize path
-             var optimizedPath = new List<Point>();
-             if (path.Count > 0) { optimizedPath.Add(path[0]); for (int i = 1; i < path.Count; i++) { if (path[i] != path[i - 1]) optimizedPath.Add(path[i]); } }
-             return optimizedPath;
-        }
-
-
+                            // else { LayoutLogger.Log($" -> Direct DrawLines SKIPPED for {source.Name}->{target.Name} due to invalid path."); }
+                        } // End if target valid
+                    } // End if source is floating
+                } // End foreach source control
+            } // End Using Pens/Brushes
+        } // End Method
         // Helper: Drag line via Drawer
         private void DrawDragLine(IDesignTimeDrawer drawer, Control startControl, PointType startPointType, Point currentScreenPoint, Color lineColor, float lineWidth, int outwardOffset)
         {
             if (startControl == null || startPointType == PointType.None || startControl.IsDisposed) return;
-
-            var startBounds = GetControlBoundsInPanel(startControl);
-            var startRects = GetConnectorRects(startBounds, outwardOffset);
-
-            if (startRects.TryGetValue(startPointType, out Rectangle startConnRect) && !startConnRect.IsEmpty)
+            var startBounds = GetControlBoundsInPanel(startControl); var startRectsPanel = GetConnectorRects(startBounds, outwardOffset);
+            if (startRectsPanel.TryGetValue(startPointType, out var startConnRectPanel) && !startConnRectPanel.IsEmpty)
             {
-                Point startPtSource = GetCenter(startConnRect); // Panel coords for start
-
-                // Convert screen point to client coordinates OF THIS PANEL
-                Point endPtSource = this.PointToClient(currentScreenPoint); // <<< FIX: Use 'this' instead of _sourcePanel
-
-                using (Pen tempPen = new Pen(lineColor, lineWidth) { DashStyle = DashStyle.Dash })
-                {
-                    // Draw Line via Drawer using panel-relative coords
-                    drawer.DrawLine(tempPen, startPtSource, endPtSource);
-                }
-            }
+                Point startPtSource = GetCenter(startConnRectPanel); Point endPtSource = this.PointToClient(currentScreenPoint);
+                using (Pen tempPen = new Pen(lineColor, lineWidth) { DashStyle = DashStyle.Dash }) { drawer.DrawLine(tempPen, startPtSource, endPtSource); }
+            } // Use drawer
         }
 
         #endregion
 
-        #region Geometry, Mapping & State Helpers (Design-Time)
-        // --- These helpers calculate coordinates/state relative to the StackLayout ---
-        // --- They DO NOT perform drawing themselves ---
+        #region Geometry, Mapping & State Helpers (Shared by Capture/Direct Mode)
 
         // --- Get Connection State ---
-        // Determines if 'control' is a source (dot) or target (arrow) at any point
         private void GetConnectionState(Control control, out bool isSourceConnected, out PointType sourcePoint, out bool isTargetConnected, out PointType targetPoint, out Control sourceControlForTarget)
         {
-             isSourceConnected = false; sourcePoint = PointType.None;
-             isTargetConnected = false; targetPoint = PointType.None;
-             sourceControlForTarget = null;
-             if (control == null || !this.DesignMode || _designerHostDT == null || _designerHostDT.Container == null) return;
+            isSourceConnected = false; sourcePoint = PointType.None; isTargetConnected = false; targetPoint = PointType.None; sourceControlForTarget = null;
+            if (control == null || !this.DesignMode) return; // Check design mode
+            EnsureServicesDT(); // Make sure _designerHostDT is available if needed
+            if (_designerHostDT == null || _designerHostDT.Container == null) return; // Need host to check connections
 
-             // Check if 'control' is a SOURCE
-             var props = this.GetPropertiesOrDefault(control);
-             if (props.IsFloating && !string.IsNullOrEmpty(props.FloatTargetName))
-             {
-                 Control targetControl = null;
-                 try { targetControl = _designerHostDT.Container.Components[props.FloatTargetName] as Control; } catch { }
-
-                 if (targetControl != null && targetControl.Parent == this && targetControl.Visible)
-                 {
-                     var controlBounds = GetControlBoundsInPanel(control);
-                     var targetBounds = GetControlBoundsInPanel(targetControl);
-                     PointType targetConnType = MapAlignmentToConnector(props.FloatAlignment);
-                     sourcePoint = GetOppositeConnectorType(targetConnType); // Use opposite for source icon placement
-                     if (sourcePoint == PointType.None) sourcePoint = GetClosestConnectionPointType(controlBounds, GetCenter(targetBounds));
-                     isSourceConnected = true;
-                 }
-             }
-
+            // Check if 'control' is a SOURCE
+            var props = GetPropertiesOrDefault(control); // Extender method from other partial
+            if (props.IsFloating && !string.IsNullOrEmpty(props.FloatTargetName))
+            {
+                Control targetControl = null; try { targetControl = _designerHostDT.Container.Components[props.FloatTargetName] as Control; } catch { }
+                if (targetControl != null && targetControl.Parent == this && targetControl.Visible)
+                {
+                    var controlBounds = GetControlBoundsInPanel(control); var targetBounds = GetControlBoundsInPanel(targetControl);
+                    PointType targetConnType = MapAlignmentToConnector(props.FloatAlignment); sourcePoint = GetOppositeConnectorType(targetConnType);
+                    if (sourcePoint == PointType.None) sourcePoint = GetClosestConnectionPointType(controlBounds, GetCenter(targetBounds));
+                    isSourceConnected = true;
+                }
+            }
             // Check if 'control' is a TARGET
-             if (!string.IsNullOrEmpty(control.Name)) // Check name first
-             {
-                 foreach (IComponent component in _designerHostDT.Container.Components)
-                 {
-                     if (component is Control potentialSource && potentialSource.Parent == this && potentialSource != control && potentialSource.Visible)
-                     {
-                         var sourceProps = this.GetPropertiesOrDefault(potentialSource);
-                         if (sourceProps.IsFloating && sourceProps.FloatTargetName == control.Name)
-                         {
-                             targetPoint = MapAlignmentToConnector(sourceProps.FloatAlignment);
-                             isTargetConnected = true;
-                             sourceControlForTarget = potentialSource;
-                             break; // Found the first connection targeting this control
-                         }
-                     }
-                 }
-             }
+            if (!string.IsNullOrEmpty(control.Name))
+            {
+                foreach (IComponent component in _designerHostDT.Container.Components)
+                {
+                    if (component is Control potentialSource && potentialSource.Parent == this && potentialSource != control && potentialSource.Visible)
+                    {
+                        var sourceProps = GetPropertiesOrDefault(potentialSource);
+                        if (sourceProps.IsFloating && sourceProps.FloatTargetName == control.Name)
+                        {
+                            targetPoint = MapAlignmentToConnector(sourceProps.FloatAlignment); isTargetConnected = true; sourceControlForTarget = potentialSource; break;
+                        }
+                    }
+                }
+            }
         }
 
         // --- Basic Geometry ---
@@ -725,27 +828,11 @@ namespace SharpBrowser.Controls
         // --- Connector Rectangle Calculation ---
         private Dictionary<PointType, Rectangle> GetConnectorRects(Rectangle controlBounds, int outwardOffset)
         {
-            var dict = new Dictionary<PointType, Rectangle>();
-            if (controlBounds.IsEmpty) return dict;
-
-            int CurrentConnectorSize = DesignTimeConnectorSize;
-            int CurrentHalfConnectorSize = DesignTimeHalfConnectorSize;
-            int midX = controlBounds.Left + controlBounds.Width / 2;
-            int midY = controlBounds.Top + controlBounds.Height / 2;
-
-            int topY = controlBounds.Top - CurrentConnectorSize - outwardOffset;
-            int bottomY = controlBounds.Bottom + outwardOffset;
-            int leftX = controlBounds.Left - CurrentConnectorSize - outwardOffset;
-            int rightX = controlBounds.Right + outwardOffset;
-
-            int centerX_TB = midX - CurrentHalfConnectorSize;
-            int centerY_LR = midY - CurrentHalfConnectorSize;
-
-            dict[PointType.Top] = new Rectangle(centerX_TB, topY, CurrentConnectorSize, CurrentConnectorSize);
-            dict[PointType.Bottom] = new Rectangle(centerX_TB, bottomY, CurrentConnectorSize, CurrentConnectorSize);
-            dict[PointType.Left] = new Rectangle(leftX, centerY_LR, CurrentConnectorSize, CurrentConnectorSize);
-            dict[PointType.Right] = new Rectangle(rightX, centerY_LR, CurrentConnectorSize, CurrentConnectorSize);
-
+            var dict = new Dictionary<PointType, Rectangle>(); if (controlBounds.IsEmpty) return dict;
+            int cs = DesignTimeConnectorSize, hcs = DesignTimeHalfConnectorSize; int midX = controlBounds.Left + controlBounds.Width / 2, midY = controlBounds.Top + controlBounds.Height / 2;
+            int topY = controlBounds.Top - cs - outwardOffset, bottomY = controlBounds.Bottom + outwardOffset, leftX = controlBounds.Left - cs - outwardOffset, rightX = controlBounds.Right + outwardOffset;
+            int cxTB = midX - hcs, cyLR = midY - hcs;
+            dict[PointType.Top] = new Rectangle(cxTB, topY, cs, cs); dict[PointType.Bottom] = new Rectangle(cxTB, bottomY, cs, cs); dict[PointType.Left] = new Rectangle(leftX, cyLR, cs, cs); dict[PointType.Right] = new Rectangle(rightX, cyLR, cs, cs);
             return dict;
         }
 
@@ -753,31 +840,192 @@ namespace SharpBrowser.Controls
         private Point GetCenter(Rectangle rect) => rect.IsEmpty ? Point.Empty : new Point(rect.Left + rect.Width / 2, rect.Top + rect.Height / 2);
 
         // --- Enum Mappings ---
-        private FloatAlignment MapConnectorToAlignment(PointType targetPointType)
-        {
-            switch (targetPointType) { case PointType.Top: return FloatAlignment.ToTopOf; case PointType.Bottom: return FloatAlignment.ToBottomOf; case PointType.Left: return FloatAlignment.ToLeftOf; case PointType.Right: return FloatAlignment.ToRightOf; default: return FloatAlignment.TopLeft; }
-        }
-        private PointType MapAlignmentToConnector(FloatAlignment alignment)
-        {
-            switch (alignment) { case FloatAlignment.ToTopOf: return PointType.Top; case FloatAlignment.ToBottomOf: return PointType.Bottom; case FloatAlignment.ToLeftOf: return PointType.Left; case FloatAlignment.ToRightOf: return PointType.Right; default: return PointType.None; }
-        }
+        private FloatAlignment MapConnectorToAlignment(PointType targetPointType) { switch (targetPointType) { case PointType.Top: return FloatAlignment.ToTopOf; case PointType.Bottom: return FloatAlignment.ToBottomOf; case PointType.Left: return FloatAlignment.ToLeftOf; case PointType.Right: return FloatAlignment.ToRightOf; default: return FloatAlignment.TopLeft; } }
+        private PointType MapAlignmentToConnector(FloatAlignment alignment) { switch (alignment) { case FloatAlignment.ToTopOf: return PointType.Top; case FloatAlignment.ToBottomOf: return PointType.Bottom; case FloatAlignment.ToLeftOf: return PointType.Left; case FloatAlignment.ToRightOf: return PointType.Right; default: return PointType.None; } }
 
         // --- Opposite Connector ---
-        private PointType GetOppositeConnectorType(PointType type)
-        {
-            switch (type) { case PointType.Top: return PointType.Bottom; case PointType.Bottom: return PointType.Top; case PointType.Left: return PointType.Right; case PointType.Right: return PointType.Left; default: return PointType.None; }
-        }
+        private PointType GetOppositeConnectorType(PointType type) { switch (type) { case PointType.Top: return PointType.Bottom; case PointType.Bottom: return PointType.Top; case PointType.Left: return PointType.Right; case PointType.Right: return PointType.Left; default: return PointType.None; } }
 
         // --- Closest Point Calculation ---
-        private PointType GetClosestConnectionPointType(Rectangle sourceBounds, Point targetPoint)
+        private PointType GetClosestConnectionPointType(Rectangle sourceBounds, Point targetPoint) { var rects = GetConnectorRects(sourceBounds, DesignTimeConnectorOffset); PointType closest = PointType.None; double minDistSq = double.MaxValue; foreach (var kvp in rects) { if (kvp.Value.IsEmpty) continue; Point center = GetCenter(kvp.Value); double dx = center.X - targetPoint.X; double dy = center.Y - targetPoint.Y; double distSq = dx * dx + dy * dy; if (distSq < minDistSq) { minDistSq = distSq; closest = kvp.Key; } } return closest; }
+
+        // --- Calculate Orthogonal Path --- (User Provided Version)
+        private List<Point> CalculateOrthogonalPath(Point startPt, Point endPt, PointType startType, PointType endType, int margin)
         {
-            var rects = GetConnectorRects(sourceBounds, DesignTimeConnectorOffset);
-            PointType closest = PointType.None; double minDistSq = double.MaxValue;
-            foreach (var kvp in rects) { if (kvp.Value.IsEmpty) continue; Point center = GetCenter(kvp.Value); double dx = center.X - targetPoint.X; double dy = center.Y - targetPoint.Y; double distSq = dx * dx + dy * dy; if (distSq < minDistSq) { minDistSq = distSq; closest = kvp.Key; } }
-            return closest;
+            // Use DesignTimeLineRoutingMargin defined in this file
+            // int margin = DesignTimeLineRoutingMargin; // Margin is passed in
+
+            if (startPt == endPt) return new List<Point> { startPt, endPt }; // Avoid zero-length
+
+            // Handle cases where start or end type might be None (e.g., from fallback logic)
+            if (startType == PointType.None || endType == PointType.None)
+            {
+                // Default to a direct line if types are invalid for routing
+                // LayoutLogger.Log($"CalculateOrthogonalPath WARN: Invalid PointType (Start={startType}, End={endType}). Returning direct line.");
+                return new List<Point> { startPt, endPt };
+            }
+
+
+            var path = new List<Point>();
+            path.Add(startPt); // Start at the source connector center
+
+            Point p1 = startPt; // First intermediate point (moves outward)
+            Point p2 = endPt;   // Second intermediate point (moves outward from target)
+
+            // Calculate p1 based on startType
+            switch (startType)
+            {
+                case PointType.Top: p1.Y -= margin; break;
+                case PointType.Bottom: p1.Y += margin; break;
+                case PointType.Left: p1.X -= margin; break;
+                case PointType.Right: p1.X += margin; break;
+                    // No default needed due to None check above
+            }
+
+            // Calculate p2 based on endType
+            switch (endType)
+            {
+                case PointType.Top: p2.Y -= margin; break;
+                case PointType.Bottom: p2.Y += margin; break;
+                case PointType.Left: p2.X -= margin; break;
+                case PointType.Right: p2.X += margin; break;
+                    // No default needed due to None check above
+            }
+
+            path.Add(p1); // Add the outward point from source
+
+            // Determine routing based on directions
+            bool startIsVertical = (startType == PointType.Top || startType == PointType.Bottom);
+            bool endIsVertical = (endType == PointType.Top || endType == PointType.Bottom);
+
+            if (startIsVertical && !endIsVertical) // e.g., Bottom -> Left/Right
+            {
+                path.Add(new Point(p2.X, p1.Y)); // Corner point
+            }
+            else if (!startIsVertical && endIsVertical) // e.g., Right -> Top/Bottom
+            {
+                path.Add(new Point(p1.X, p2.Y)); // Corner point
+            }
+            else if (startIsVertical && endIsVertical) // e.g., Bottom -> Top
+            {
+                // Need two corners for vertical alignment
+                int midX = (p1.X + p2.X) / 2;
+                path.Add(new Point(midX, p1.Y));
+                path.Add(new Point(midX, p2.Y));
+            }
+            else // Both horizontal, e.g., Right -> Left
+            {
+                // Need two corners for horizontal alignment
+                int midY = (p1.Y + p2.Y) / 2;
+                path.Add(new Point(p1.X, midY));
+                path.Add(new Point(p2.X, midY));
+            }
+
+            path.Add(p2); // Add the outward point from target
+            path.Add(endPt); // End at the target connector center
+
+            // Optimize path - remove duplicate consecutive points
+            var optimizedPath = new List<Point>();
+            if (path.Count > 0)
+            {
+                optimizedPath.Add(path[0]);
+                for (int i = 1; i < path.Count; i++)
+                {
+                    if (path[i] != path[i - 1]) // Add only if different from previous
+                    {
+                        optimizedPath.Add(path[i]);
+                    }
+                }
+            }
+
+            // LayoutLogger.Log($"      - Calculated Path (User Version): {string.Join(", ", optimizedPath.Select(p => p.ToString()))}");
+            return optimizedPath;
+        }
+
+        /// <summary>
+        /// Calculates an orthogonal path starting visually from the Top-Left corner
+        /// of the source bounds and ending at the center of the target connector.
+        /// </summary>
+        /// <param name="sourceTopLeft">The Top-Left coordinate of the source control's bounds (panel relative).</param>
+        /// <param name="targetConnectorCenter">The center coordinate of the target connector (panel relative).</param>
+        /// <param name="targetType">The type (Top, Bottom, Left, Right) of the target connector.</param>
+        /// <param name="margin">The routing margin.</param>
+        /// <returns>A list of points for the orthogonal path.</returns>
+        private List<Point> CalculateOrthogonalPath_TopLeftSource(Point sourceTopLeft, Point targetConnectorCenter, PointType targetType, int margin)
+        {
+            // Validate inputs
+            if (targetType == PointType.None || margin <= 0)
+            {
+                // Cannot route properly without a target type or margin, return direct line
+                return new List<Point> { sourceTopLeft, targetConnectorCenter };
+            }
+            if (sourceTopLeft == targetConnectorCenter)
+            {
+                return new List<Point> { sourceTopLeft, targetConnectorCenter };
+            }
+
+            var path = new List<Point>();
+            Point startPt = sourceTopLeft;
+            Point endPt = targetConnectorCenter;
+
+            path.Add(startPt); // 1. Start at Source Top-Left
+
+            // 2. Calculate p2: Point 'margin' distance away from the target connector center
+            Point p2 = endPt;
+            switch (targetType)
+            {
+                case PointType.Top: p2.Y -= margin; break;
+                case PointType.Bottom: p2.Y += margin; break;
+                case PointType.Left: p2.X -= margin; break;
+                case PointType.Right: p2.X += margin; break;
+            }
+
+            // 3. Calculate the intermediate corner point(s)
+            bool targetIsVertical = (targetType == PointType.Top || targetType == PointType.Bottom);
+
+            Point pIntermediate;
+
+            if (targetIsVertical)
+            {
+                // Target connection is vertical, so final segment is vertical (from p2 to endPt).
+                // The segment before p2 must be horizontal.
+                // The corner point shares Y with p2 and X with startPt.
+                pIntermediate = new Point(startPt.X, p2.Y);
+                path.Add(pIntermediate); // Add corner first
+                path.Add(p2);           // Then add outward target point
+            }
+            else // Target connection is horizontal
+            {
+                // Target connection is horizontal, so final segment is horizontal.
+                // The segment before p2 must be vertical.
+                // The corner point shares X with p2 and Y with startPt.
+                pIntermediate = new Point(p2.X, startPt.Y);
+                path.Add(pIntermediate); // Add corner first
+                path.Add(p2);           // Then add outward target point
+            }
+
+
+            path.Add(endPt); // 4. End at the target connector center
+
+
+            // 5. Optimize path (remove consecutive duplicates)
+            var optimizedPath = new List<Point>();
+            if (path.Count > 0)
+            {
+                optimizedPath.Add(path[0]);
+                for (int i = 1; i < path.Count; i++)
+                {
+                    if (path[i] != path[i - 1]) optimizedPath.Add(path[i]);
+                }
+            }
+
+            LayoutLogger.Log($"      - Calculated Path (TopLeft Source): {string.Join(", ", optimizedPath.Select(p => p.ToString()))}");
+            return optimizedPath;
         }
 
         #endregion
+
+
 
         #region Design-Time Mouse Event Overrides & Selection Change
 
@@ -786,140 +1034,57 @@ namespace SharpBrowser.Controls
             bool designTimeHandled = false;
             if (this.DesignMode && e.Button == MouseButtons.Left)
             {
-                EnsureServicesDT();
-                Point panelPoint = e.Location;
-                Point screenPoint = this.PointToScreen(panelPoint);
-
-                ResetDragStateDT();
-
-                // --- Check for Starting a BREAK ---
+                EnsureServicesDT(); Point panelPoint = e.Location; Point screenPoint = this.PointToScreen(panelPoint); ResetDragStateDT();
                 if (HitTestTargetArrow(panelPoint, out Control sourceControlForBreak, out Control targetControlHit, out PointType targetPointHit))
-                {
-                    LayoutLogger.Log($"StackLayoutDT [{this.Name}]: MouseDown - Hit BREAK arrow on '{targetControlHit.Name}' (Source='{sourceControlForBreak.Name}', Point={targetPointHit})");
-                    _currentDragModeDT = DesignDragMode.Breaking;
-                    _sourceControlDT = sourceControlForBreak;
-                    _breakLinkTargetControlDT = targetControlHit;
-                    _breakLinkTargetConnectorDT = targetPointHit;
-                    _startConnectorTypeDT = targetPointHit;
-                    _dragStartPointScreenDT = screenPoint;
-                    _dragCurrentPointScreenDT = screenPoint;
-                    this.Capture = true;
-                    this.Invalidate(true); // Trigger repaint for feedback
-                    designTimeHandled = true;
-                }
-                // --- Check for Starting a CONNECT ---
+                { _currentDragModeDT = DesignDragMode.Breaking; _sourceControlDT = sourceControlForBreak; _breakLinkTargetControlDT = targetControlHit; _breakLinkTargetConnectorDT = targetPointHit; _startConnectorTypeDT = targetPointHit; _dragStartPointScreenDT = screenPoint; _dragCurrentPointScreenDT = screenPoint; this.Capture = true; designTimeHandled = true; }
                 else if (_selectionServiceDT != null && _selectionServiceDT.PrimarySelection is Control selectedControl && selectedControl.Parent == this)
                 {
                     if (HitTestSourceConnector(panelPoint, selectedControl, out PointType sourcePointHit))
-                    {
-                        LayoutLogger.Log($"StackLayoutDT [{this.Name}]: MouseDown - Hit CONNECT point on '{selectedControl.Name}' (Point={sourcePointHit})");
-                        _currentDragModeDT = DesignDragMode.Connecting;
-                        _sourceControlDT = selectedControl;
-                        _startConnectorTypeDT = sourcePointHit;
-                        _dragStartPointScreenDT = screenPoint;
-                        _dragCurrentPointScreenDT = screenPoint;
-                        this.Capture = true;
-                        this.Invalidate(true);
-                        designTimeHandled = true;
-                    }
+                    { _currentDragModeDT = DesignDragMode.Connecting; _sourceControlDT = selectedControl; _startConnectorTypeDT = sourcePointHit; _dragStartPointScreenDT = screenPoint; _dragCurrentPointScreenDT = screenPoint; this.Capture = true; designTimeHandled = true; }
                 }
-
-                if (!designTimeHandled) { /* LayoutLogger.Log($"StackLayoutDT [{this.Name}]: MouseDown - No design-time connector hit."); */ }
+                if (designTimeHandled) { this.Invalidate(true); /* Trigger OnPaint */ }
             }
-
-            if (!designTimeHandled) { base.OnMouseDown(e); } // Call base for standard selection/move
+            if (!designTimeHandled) { base.OnMouseDown(e); }
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
-            bool designTimeHandled = false;
-            if (this.DesignMode && _currentDragModeDT != DesignDragMode.None)
-            {
-                if (this.Capture)
-                {
-                    _dragCurrentPointScreenDT = this.PointToScreen(e.Location);
-                    this.Invalidate(true); // Redraw drag line etc.
-                    designTimeHandled = true;
-                }
-                else // Lost capture unexpectedly
-                {
-                    LayoutLogger.Log($"StackLayoutDT [{this.Name}]: MouseMove - Capture lost during drag. Resetting state.");
-                    ResetDragStateDT();
-                    this.Invalidate(true);
-                    designTimeHandled = true;
-                }
-            }
-
-            if (!designTimeHandled) { base.OnMouseMove(e); }
+            if (!this.DesignMode || _currentDragModeDT == DesignDragMode.None) { base.OnMouseMove(e); return; } // Exit if not dragging or not design mode
+            if (this.Capture) { _dragCurrentPointScreenDT = this.PointToScreen(e.Location); this.Invalidate(true); /* Trigger OnPaint */ }
+            else { LayoutLogger.Log($"StackLayoutDT [{this.Name}]: MouseMove - Capture lost. Resetting."); ResetDragStateDT(); this.Invalidate(true); }
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
-            bool designTimeHandled = false;
-            if (this.DesignMode && _currentDragModeDT != DesignDragMode.None)
+            if (!this.DesignMode || _currentDragModeDT == DesignDragMode.None) { base.OnMouseUp(e); return; } // Exit if not dragging or not design mode
+            bool stateChanged = false;
+            if (this.Capture) { this.Capture = false; }
+            if (e.Button == MouseButtons.Left)
             {
-                if (this.Capture) this.Capture = false; // Always release capture
-
-                if (e.Button == MouseButtons.Left)
+                Point panelPoint = e.Location; HitTestConnector(panelPoint, out Control droppedOnControl, out PointType droppedOnPoint);
+                if (_currentDragModeDT == DesignDragMode.Connecting)
                 {
-                    Point panelPoint = e.Location;
-                    HitTestConnector(panelPoint, out Control droppedOnControl, out PointType droppedOnPoint);
-
-                    if (_currentDragModeDT == DesignDragMode.Connecting)
-                    {
-                        if (droppedOnControl != null && droppedOnControl != _sourceControlDT && droppedOnPoint != PointType.None)
-                        {
-                            LayoutLogger.Log($"StackLayoutDT [{this.Name}]: MouseUp - CONNECT drop on '{droppedOnControl.Name}', Point={droppedOnPoint}. Applying...");
-                            ApplyConnectionDT(_sourceControlDT, droppedOnControl, droppedOnPoint);
-                        }
-                        else { LayoutLogger.Log($"StackLayoutDT [{this.Name}]: MouseUp - CONNECT drop missed a valid target."); }
-                    }
-                    else if (_currentDragModeDT == DesignDragMode.Breaking)
-                    {
-                        if (droppedOnControl == null) // Dropped off any connector
-                        {
-                            LayoutLogger.Log($"StackLayoutDT [{this.Name}]: MouseUp - BREAK drop missed connectors. Breaking connection...");
-                            BreakConnectionDT(_sourceControlDT);
-                        }
-                        else { LayoutLogger.Log($"StackLayoutDT [{this.Name}]: MouseUp - BREAK drop hit connector on '{droppedOnControl.Name}'. No change made."); }
-                    }
+                    if (droppedOnControl != null && droppedOnControl != _sourceControlDT && droppedOnPoint != PointType.None)
+                    { ApplyConnectionDT(_sourceControlDT, droppedOnControl, droppedOnPoint); stateChanged = true; /* ApplyConnection calls Invalidate */ }
                 }
-                // else { LayoutLogger.Log($"StackLayoutDT [{this.Name}]: MouseUp - Ignored (button was not Left). Drag state reset."); }
-
-                // Reset state and redraw AFTER processing
-                ResetDragStateDT();
-                this.Invalidate(true);
-                designTimeHandled = true;
+                else if (_currentDragModeDT == DesignDragMode.Breaking)
+                {
+                    if (droppedOnControl == null) // Dropped clear
+                    { BreakConnectionDT(_sourceControlDT); stateChanged = true; /* BreakConnection calls Invalidate */ }
+                }
             }
-
-            if (!designTimeHandled) { base.OnMouseUp(e); }
+            // Reset state AFTER potentially changing properties
+            ResetDragStateDT();
+            // Invalidate AFTER resetting state, regardless of whether properties changed, to clear drag visuals
+            this.Invalidate(true);
         }
 
-
-        /// <summary>
-        /// Handles the SelectionChanged event from the designer's ISelectionService.
-        /// Forces a repaint of the StackLayout to clear potential artifacts (like old connectors).
-        /// </summary>
+        // Handles SelectionChanged event from ISelectionService
         private void SelectionService_SelectionChanged(object sender, EventArgs e)
         {
-            // LayoutLogger.Log($"StackLayoutDT [{this.Name}]: SelectionService_SelectionChanged Fired. Invalidating."); // Noisy
-
-            // Check if handle created and not disposed before invalidating
-            if (this.IsHandleCreated && !this.IsDisposed && !this.Disposing && this.DesignMode)
-            {
-                try
-                {
-                    // Invalidate the entire control surface to ensure artifacts are cleared
-                    this.Invalidate(true);
-                }
-                catch (Exception ex)
-                {
-                     LayoutLogger.Log($"StackLayoutDT [{this.Name}]: ERROR during Invalidate in SelectionService_SelectionChanged: {ex.Message}");
-                }
-            }
-            // else { LayoutLogger.Log($"StackLayoutDT [{this.Name}]: SelectionService_SelectionChanged - Skipped Invalidate (Handle not created or disposed)."); }
+            // LayoutLogger.Log($"StackLayoutDT [{this.Name}]: SelectionService_SelectionChanged Fired."); // Noisy
+            if (this.IsHandleCreated && !this.IsDisposed && this.DesignMode) { try { this.Invalidate(true); } catch (Exception ex) { LayoutLogger.Log($"ERROR Invalidate in SelectionChanged: {ex.Message}"); } }
         }
-
 
         #endregion
 
@@ -928,22 +1093,11 @@ namespace SharpBrowser.Controls
         // Checks if point is on *any* connector of *any* visible child
         private bool HitTestConnector(Point panelPoint, out Control hitControl, out PointType hitPointType)
         {
-            hitControl = null;
-            hitPointType = PointType.None;
-            // Iterate in reverse Z-order (topmost first)
+            hitControl = null; hitPointType = PointType.None;
             foreach (Control child in this.Controls.OfType<Control>().Reverse().Where(c => c.Visible))
             {
-                var bounds = GetControlBoundsInPanel(child);
-                var rects = GetConnectorRects(bounds, DesignTimeConnectorOffset);
-                foreach (var kvp in rects)
-                {
-                    if (kvp.Value.Contains(panelPoint))
-                    {
-                        hitControl = child;
-                        hitPointType = kvp.Key;
-                        return true; // Found topmost hit
-                    }
-                }
+                var bounds = GetControlBoundsInPanel(child); var rects = GetConnectorRects(bounds, DesignTimeConnectorOffset);
+                foreach (var kvp in rects) { if (kvp.Value.Contains(panelPoint)) { hitControl = child; hitPointType = kvp.Key; return true; } }
             }
             return false;
         }
@@ -953,68 +1107,48 @@ namespace SharpBrowser.Controls
         {
             sourceControl = null; targetControl = null; targetPoint = PointType.None;
             if (!this.DesignMode || _designerHostDT == null || _designerHostDT.Container == null) return false;
-
-            // Iterate potential targets
             foreach (Control potentialTarget in this.Controls.OfType<Control>().Reverse().Where(c => c.Visible && !string.IsNullOrEmpty(c.Name)))
             {
-                // Is potentialTarget targeted by anyone? Check all components in the container
                 foreach (IComponent component in _designerHostDT.Container.Components)
                 {
-                     if (component is Control potentialSource && potentialSource.Parent == this && potentialSource != potentialTarget && potentialSource.Visible)
-                     {
-                         var sourceProps = this.GetPropertiesOrDefault(potentialSource);
-                         if (sourceProps.IsFloating && sourceProps.FloatTargetName == potentialTarget.Name)
-                         {
-                             // Found connection: potentialSource -> potentialTarget
-                             PointType pointOnTarget = MapAlignmentToConnector(sourceProps.FloatAlignment);
-                             if (pointOnTarget != PointType.None) // Ensure valid alignment mapping
-                             {
-                                 var targetBounds = GetControlBoundsInPanel(potentialTarget);
-                                 var targetRects = GetConnectorRects(targetBounds, DesignTimeConnectorOffset);
-                                 if (targetRects.TryGetValue(pointOnTarget, out Rectangle arrowRect) && arrowRect.Contains(panelPoint))
-                                 {
-                                     // Hit the arrow!
-                                     sourceControl = potentialSource;
-                                     targetControl = potentialTarget;
-                                     targetPoint = pointOnTarget;
-                                     return true;
-                                 }
-                             }
-                             // Only check the *first* connection targeting this control for hit-test simplicity
-                             goto nextPotentialTarget; // Optimization
-                         }
-                     }
+                    if (component is Control potentialSource && potentialSource.Parent == this && potentialSource != potentialTarget && potentialSource.Visible)
+                    {
+                        var sourceProps = this.GetPropertiesOrDefault(potentialSource);
+                        if (sourceProps.IsFloating && sourceProps.FloatTargetName == potentialTarget.Name)
+                        {
+                            PointType pointOnTarget = MapAlignmentToConnector(sourceProps.FloatAlignment);
+                            if (pointOnTarget != PointType.None)
+                            {
+                                var targetBounds = GetControlBoundsInPanel(potentialTarget); var targetRects = GetConnectorRects(targetBounds, DesignTimeConnectorOffset);
+                                if (targetRects.TryGetValue(pointOnTarget, out Rectangle arrowRect) && arrowRect.Contains(panelPoint))
+                                {
+                                    sourceControl = potentialSource; targetControl = potentialTarget; targetPoint = pointOnTarget; return true;
+                                }
+                            }
+                            goto nextPotentialTarget; // Optimization
+                        }
+                    }
                 }
-            nextPotentialTarget:; // Label for the goto jump
+            nextPotentialTarget:;
             }
-            return false; // No arrow hit
+            return false;
         }
 
         // Checks if point is on a standard source connector of the *currently selected* control
         private bool HitTestSourceConnector(Point panelPoint, Control selectedControl, out PointType sourcePoint)
         {
-            sourcePoint = PointType.None;
-            if (selectedControl == null || !selectedControl.Visible) return false;
-
-            var bounds = GetControlBoundsInPanel(selectedControl);
-            var rects = GetConnectorRects(bounds, DesignTimeConnectorOffset);
-
+            sourcePoint = PointType.None; if (selectedControl == null || !selectedControl.Visible) return false;
+            var bounds = GetControlBoundsInPanel(selectedControl); var rects = GetConnectorRects(bounds, DesignTimeConnectorOffset);
             foreach (var kvp in rects)
             {
                 if (kvp.Value.Contains(panelPoint))
                 {
-                    // Verify this point isn't ALSO a target arrow for some OTHER control
                     GetConnectionState(selectedControl, out _, out _, out bool isTargetAtThisPoint, out PointType targetPointType, out _);
-                    if (isTargetAtThisPoint && kvp.Key == targetPointType)
-                    {
-                        return false; // Clicked on an arrow icon, let HitTestTargetArrow handle it.
-                    }
-                    // It's a standard or source-dot connector on the selected control
-                    sourcePoint = kvp.Key;
-                    return true;
+                    if (isTargetAtThisPoint && kvp.Key == targetPointType) { return false; /* Is an arrow */ }
+                    sourcePoint = kvp.Key; return true; /* Hit standard/source */
                 }
             }
-            return false; // No hit on selected control's source connectors
+            return false;
         }
 
         #endregion
@@ -1023,203 +1157,62 @@ namespace SharpBrowser.Controls
 
         // Resets the internal state variables used for tracking drags
         private void ResetDragStateDT()
-        {
-            _currentDragModeDT = DesignDragMode.None;
-            _sourceControlDT = null;
-            _startConnectorTypeDT = PointType.None;
-            _dragStartPointScreenDT = Point.Empty;
-            _dragCurrentPointScreenDT = Point.Empty;
-            _breakLinkTargetControlDT = null;
-            _breakLinkTargetConnectorDT = PointType.None;
-            // LayoutLogger.Log($"StackLayoutDT [{this.Name}]: ResetDragStateDT called."); // Noisy
-        }
+        { _currentDragModeDT = DesignDragMode.None; _sourceControlDT = null; _startConnectorTypeDT = PointType.None; _dragStartPointScreenDT = Point.Empty; _dragCurrentPointScreenDT = Point.Empty; _breakLinkTargetControlDT = null; _breakLinkTargetConnectorDT = PointType.None; }
 
         // Applies property changes for creating a connection (Uses DesignerTransaction)
         private void ApplyConnectionDT(Control source, Control target, PointType targetPointType)
         {
-            EnsureServicesDT();
-            if (_componentChangeServiceDT == null || _designerHostDT == null)
-            {
-                LayoutLogger.Log($"StackLayoutDT [{this.Name}]: ERROR - ApplyConnectionDT Cannot proceed: ComponentChangeService or DesignerHost unavailable.");
-                this.Invalidate(true); // Still redraw to remove drag line
-                return;
-            }
-            if (source == null || target == null || string.IsNullOrEmpty(target.Name))
-            {
-                LayoutLogger.Log($"StackLayoutDT [{this.Name}]: ERROR: ApplyConnectionDT prerequisites failed (source, target, or target name invalid).");
-                return;
-            }
-
+            EnsureServicesDT(); if (_componentChangeServiceDT == null || _designerHostDT == null) { LayoutLogger.Log($"ERROR ApplyConnectionDT: Services unavailable."); this.Invalidate(true); return; }
+            if (source == null || target == null || string.IsNullOrEmpty(target.Name)) { LayoutLogger.Log($"ERROR ApplyConnectionDT: Args invalid."); return; }
             FloatAlignment alignment = MapConnectorToAlignment(targetPointType);
-            LayoutLogger.Log($"StackLayoutDT [{this.Name}]: Applying Connection: Source='{source.Name}', Target='{target.Name}', Alignment={alignment}");
-
-            PropertyDescriptor isFloatingProp = TypeDescriptor.GetProperties(source)["lay_IsFloating"];
-            PropertyDescriptor targetNameProp = TypeDescriptor.GetProperties(source)["lay_FloatTargetName"];
-            PropertyDescriptor alignmentProp = TypeDescriptor.GetProperties(source)["lay_FloatAlignment"];
-            // Add others if needed (OffsetX, OffsetY, ZOrder - though maybe not set via basic connect)
-
-            if (isFloatingProp == null || targetNameProp == null || alignmentProp == null)
-            {
-                LayoutLogger.Log($"StackLayoutDT [{this.Name}]: ERROR: ApplyConnectionDT - Required PropertyDescriptor not found for extender properties.");
-                return;
-            }
-
-            DesignerTransaction transaction = null;
-            try
+            PropertyDescriptor isFloatingProp = TypeDescriptor.GetProperties(source)["lay_IsFloating"], targetNameProp = TypeDescriptor.GetProperties(source)["lay_FloatTargetName"], alignmentProp = TypeDescriptor.GetProperties(source)["lay_FloatAlignment"];
+            if (isFloatingProp == null || targetNameProp == null || alignmentProp == null) { LayoutLogger.Log($"ERROR ApplyConnectionDT: Props not found."); return; }
+            DesignerTransaction transaction = null; try
             {
                 transaction = _designerHostDT.CreateTransaction($"Connect {source.Name} to {target.Name}");
-                LayoutLogger.Log($"StackLayoutDT [{this.Name}]: Started transaction: {transaction.Description}");
-
-                // Get OLD values for ComponentChanged event
-                bool oldIsFloating = (bool)GetCurrentValueDT(source, "lay_IsFloating", false);
-                string oldTargetName = (string)GetCurrentValueDT(source, "lay_FloatTargetName", "");
-                FloatAlignment oldAlignment = (FloatAlignment)GetCurrentValueDT(source, "lay_FloatAlignment", FloatAlignment.TopLeft);
-
-                // Announce upcoming changes
-                _componentChangeServiceDT.OnComponentChanging(source, isFloatingProp);
-                _componentChangeServiceDT.OnComponentChanging(source, targetNameProp);
-                _componentChangeServiceDT.OnComponentChanging(source, alignmentProp);
-
-                // Set NEW values using PropertyDescriptors
-                isFloatingProp.SetValue(source, true);
-                targetNameProp.SetValue(source, target.Name);
-                alignmentProp.SetValue(source, alignment);
-                // Optionally reset offsets here if desired upon new connection?
-                // TypeDescriptor.GetProperties(source)["lay_FloatOffsetX"]?.SetValue(source, 0);
-                // TypeDescriptor.GetProperties(source)["lay_FloatOffsetY"]?.SetValue(source, 0);
-
-                // Announce changes completed
-                _componentChangeServiceDT.OnComponentChanged(source, isFloatingProp, oldIsFloating, true);
-                _componentChangeServiceDT.OnComponentChanged(source, targetNameProp, oldTargetName, target.Name);
-                _componentChangeServiceDT.OnComponentChanged(source, alignmentProp, oldAlignment, alignment);
-
-                transaction?.Commit();
-                LayoutLogger.Log($"StackLayoutDT [{this.Name}]: Connection transaction committed.");
-
-                // Trigger layout AFTER properties are committed
-                this.PerformLayout(); // Perform layout on this panel instance
-
+                bool oldIsFloating = (bool)GetCurrentValueDT(source, "lay_IsFloating", false); string oldTargetName = (string)GetCurrentValueDT(source, "lay_FloatTargetName", ""); FloatAlignment oldAlignment = (FloatAlignment)GetCurrentValueDT(source, "lay_FloatAlignment", FloatAlignment.TopLeft);
+                _componentChangeServiceDT.OnComponentChanging(source, isFloatingProp); _componentChangeServiceDT.OnComponentChanging(source, targetNameProp); _componentChangeServiceDT.OnComponentChanging(source, alignmentProp);
+                isFloatingProp.SetValue(source, true); targetNameProp.SetValue(source, target.Name); alignmentProp.SetValue(source, alignment);
+                // Optionally reset offsets
+                // TypeDescriptor.GetProperties(source)["lay_FloatOffsetX"]?.SetValue(source, 0); TypeDescriptor.GetProperties(source)["lay_FloatOffsetY"]?.SetValue(source, 0);
+                _componentChangeServiceDT.OnComponentChanged(source, isFloatingProp, oldIsFloating, true); _componentChangeServiceDT.OnComponentChanged(source, targetNameProp, oldTargetName, target.Name); _componentChangeServiceDT.OnComponentChanged(source, alignmentProp, oldAlignment, alignment);
+                transaction?.Commit(); LayoutLogger.Log($"StackLayoutDT [{this.Name}]: Connection transaction committed."); this.PerformLayout();
             }
-            catch (Exception ex)
-            {
-                LayoutLogger.Log($"StackLayoutDT [{this.Name}]: ERROR Applying Connection Transaction: {ex.Message}\n{ex.StackTrace}");
-                try { transaction?.Cancel(); } catch { } // Avoid exception in cancel
-                LayoutLogger.Log($"StackLayoutDT [{this.Name}]: Connection transaction cancelled.");
-            }
-            finally
-            {
-                // Ensure redraw happens even if transaction failed
-                this.Invalidate(true);
-            }
+            catch (Exception ex) { LayoutLogger.Log($"ERROR ApplyConnectionDT Tx: {ex.Message}"); try { transaction?.Cancel(); } catch { } }
+            finally { this.Invalidate(true); } // Ensure redraw
         }
 
         // Applies property changes for breaking a connection (Uses DesignerTransaction)
         private void BreakConnectionDT(Control source)
         {
-            EnsureServicesDT();
-            if (_componentChangeServiceDT == null || _designerHostDT == null)
-            {
-                LayoutLogger.Log($"StackLayoutDT [{this.Name}]: ERROR - BreakConnectionDT Cannot proceed: ComponentChangeService or DesignerHost unavailable.");
-                this.Invalidate(true);
-                return;
-            }
-            if (source == null) { LayoutLogger.Log($"StackLayoutDT [{this.Name}]: ERROR: BreakConnectionDT source is null."); return; }
-
-            LayoutLogger.Log($"StackLayoutDT [{this.Name}]: Breaking Connection for: Source='{source.Name}'");
-
-            PropertyDescriptor isFloatingProp = TypeDescriptor.GetProperties(source)["lay_IsFloating"];
-            PropertyDescriptor targetNameProp = TypeDescriptor.GetProperties(source)["lay_FloatTargetName"];
-            PropertyDescriptor alignmentProp = TypeDescriptor.GetProperties(source)["lay_FloatAlignment"];
-            // Add others if needed (OffsetX, OffsetY, ZOrder - reset them too?)
-
-            if (isFloatingProp == null || targetNameProp == null || alignmentProp == null)
-            {
-                LayoutLogger.Log($"StackLayoutDT [{this.Name}]: ERROR: BreakConnectionDT - Required PropertyDescriptor not found.");
-                return;
-            }
-
-            // Get OLD values to see if change is needed and for ComponentChanged event
-            bool currentIsFloating = (bool)GetCurrentValueDT(source, "lay_IsFloating", false);
-            string currentTargetName = (string)GetCurrentValueDT(source, "lay_FloatTargetName", "");
-            FloatAlignment currentAlignment = (FloatAlignment)GetCurrentValueDT(source, "lay_FloatAlignment", FloatAlignment.TopLeft);
-            // int currentOffsetX = (int)GetCurrentValueDT(source, "lay_FloatOffsetX", 0);
-            // int currentOffsetY = (int)GetCurrentValueDT(source, "lay_FloatOffsetY", 0);
-
-            if (!currentIsFloating && string.IsNullOrEmpty(currentTargetName))
-            {
-                LayoutLogger.Log($"StackLayoutDT [{this.Name}]: Connection already broken for '{source.Name}'. No change needed.");
-                this.Invalidate(true); // Still invalidate to remove drag line if any
-                return;
-            }
-
-            DesignerTransaction transaction = null;
-            try
+            EnsureServicesDT(); if (_componentChangeServiceDT == null || _designerHostDT == null) { LayoutLogger.Log($"ERROR BreakConnectionDT: Services unavailable."); this.Invalidate(true); return; }
+            if (source == null) { LayoutLogger.Log($"ERROR BreakConnectionDT: Source null."); return; }
+            PropertyDescriptor isFloatingProp = TypeDescriptor.GetProperties(source)["lay_IsFloating"], targetNameProp = TypeDescriptor.GetProperties(source)["lay_FloatTargetName"], alignmentProp = TypeDescriptor.GetProperties(source)["lay_FloatAlignment"];
+            if (isFloatingProp == null || targetNameProp == null || alignmentProp == null) { LayoutLogger.Log($"ERROR BreakConnectionDT: Props not found."); return; }
+            bool currentIsFloating = (bool)GetCurrentValueDT(source, "lay_IsFloating", false); string currentTargetName = (string)GetCurrentValueDT(source, "lay_FloatTargetName", ""); FloatAlignment currentAlignment = (FloatAlignment)GetCurrentValueDT(source, "lay_FloatAlignment", FloatAlignment.TopLeft);
+            if (!currentIsFloating && string.IsNullOrEmpty(currentTargetName)) { LayoutLogger.Log($"Already broken: {source.Name}."); this.Invalidate(true); return; }
+            DesignerTransaction transaction = null; try
             {
                 transaction = _designerHostDT.CreateTransaction($"Disconnect {source.Name}");
-                LayoutLogger.Log($"StackLayoutDT [{this.Name}]: Started transaction: {transaction.Description}");
-
-                // Announce changes
-                _componentChangeServiceDT.OnComponentChanging(source, isFloatingProp);
-                _componentChangeServiceDT.OnComponentChanging(source, targetNameProp);
-                _componentChangeServiceDT.OnComponentChanging(source, alignmentProp);
-                // Announce offset changes if resetting them
-                // _componentChangeServiceDT.OnComponentChanging(source, TypeDescriptor.GetProperties(source)["lay_FloatOffsetX"]);
-                // _componentChangeServiceDT.OnComponentChanging(source, TypeDescriptor.GetProperties(source)["lay_FloatOffsetY"]);
-
-                // Set new (default) values
-                isFloatingProp.SetValue(source, false);
-                targetNameProp.SetValue(source, "");
-                alignmentProp.SetValue(source, FloatAlignment.TopLeft); // Set to default
-                // Optionally reset offsets
-                // TypeDescriptor.GetProperties(source)["lay_FloatOffsetX"]?.SetValue(source, 0);
-                // TypeDescriptor.GetProperties(source)["lay_FloatOffsetY"]?.SetValue(source, 0);
-
-                // Announce completion
-                _componentChangeServiceDT.OnComponentChanged(source, isFloatingProp, currentIsFloating, false);
-                _componentChangeServiceDT.OnComponentChanged(source, targetNameProp, currentTargetName, "");
-                _componentChangeServiceDT.OnComponentChanged(source, alignmentProp, currentAlignment, FloatAlignment.TopLeft);
-                // Announce offset changes if reset
-                // _componentChangeServiceDT.OnComponentChanged(source, TypeDescriptor.GetProperties(source)["lay_FloatOffsetX"], currentOffsetX, 0);
-                // _componentChangeServiceDT.OnComponentChanged(source, TypeDescriptor.GetProperties(source)["lay_FloatOffsetY"], currentOffsetY, 0);
-
-
-                transaction?.Commit();
-                LayoutLogger.Log($"StackLayoutDT [{this.Name}]: Break connection transaction committed.");
-
-                // Trigger layout AFTER properties are committed
-                this.PerformLayout();
-
+                _componentChangeServiceDT.OnComponentChanging(source, isFloatingProp); _componentChangeServiceDT.OnComponentChanging(source, targetNameProp); _componentChangeServiceDT.OnComponentChanging(source, alignmentProp);
+                isFloatingProp.SetValue(source, false); targetNameProp.SetValue(source, ""); alignmentProp.SetValue(source, FloatAlignment.TopLeft); // Default
+                                                                                                                                                     // Optionally reset offsets
+                                                                                                                                                     // TypeDescriptor.GetProperties(source)["lay_FloatOffsetX"]?.SetValue(source, 0); TypeDescriptor.GetProperties(source)["lay_FloatOffsetY"]?.SetValue(source, 0);
+                _componentChangeServiceDT.OnComponentChanged(source, isFloatingProp, currentIsFloating, false); _componentChangeServiceDT.OnComponentChanged(source, targetNameProp, currentTargetName, ""); _componentChangeServiceDT.OnComponentChanged(source, alignmentProp, currentAlignment, FloatAlignment.TopLeft);
+                transaction?.Commit(); LayoutLogger.Log($"StackLayoutDT [{this.Name}]: Break connection transaction committed."); this.PerformLayout();
             }
-            catch (Exception ex)
-            {
-                LayoutLogger.Log($"StackLayoutDT [{this.Name}]: ERROR Breaking Connection Transaction: {ex.Message}\n{ex.StackTrace}");
-                try { transaction?.Cancel(); } catch { }
-                LayoutLogger.Log($"StackLayoutDT [{this.Name}]: Break connection transaction cancelled.");
-            }
-            finally
-            {
-                this.Invalidate(true); // Ensure redraw
-            }
+            catch (Exception ex) { LayoutLogger.Log($"ERROR BreakConnectionDT Tx: {ex.Message}"); try { transaction?.Cancel(); } catch { } }
+            finally { this.Invalidate(true); } // Ensure redraw
         }
 
         // Helper to get property value safely using TypeDescriptor
         private object GetCurrentValueDT(Control ctrl, string propName, object defaultValue)
         {
-            try
-            {
-                if (ctrl == null) return defaultValue;
-                PropertyDescriptor prop = TypeDescriptor.GetProperties(ctrl)[propName];
-                return prop?.GetValue(ctrl) ?? defaultValue;
-            }
-            catch (Exception ex)
-            {
-                // LayoutLogger.Log($"StackLayoutDT [{this.Name}]: GetCurrentValueDT WARN for '{propName}' on '{ctrl?.Name}': {ex.Message}"); // Can be noisy
-                return defaultValue;
-            }
+            try { if (ctrl == null) return defaultValue; PropertyDescriptor prop = TypeDescriptor.GetProperties(ctrl)[propName]; return prop?.GetValue(ctrl) ?? defaultValue; }
+            catch (Exception) { /* Log Warning Optional */ return defaultValue; }
         }
 
         #endregion
 
     } // End partial class StackLayout
-
 } // End namespace
