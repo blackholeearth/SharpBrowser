@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Threading; // Required for Thread.ManagedThreadId
 
 namespace SharpBrowser.Controls // Use the same namespace as StackLayout
@@ -12,7 +13,7 @@ namespace SharpBrowser.Controls // Use the same namespace as StackLayout
         /// false: writes only into Debug Window.
         /// true : writes to File and Debug.Window.
         /// </summary>
-        public static bool FileLogging_IsEnabled { get; set; } = false; // Set to false to disable file logging easily
+        public static bool FileLogging_IsEnabled { get; set; } = true; // Set to false to disable file logging easily
 
         // --- Private Fields ---
         private static readonly string logFilePath;
@@ -34,8 +35,9 @@ namespace SharpBrowser.Controls // Use the same namespace as StackLayout
                 Process currentProcess = Process.GetCurrentProcess();
                 DateTime startTime = currentProcess.StartTime;
                 string startTimeString = startTime.ToString("yyyyMMdd_HHmmss");
+                string FileNameSuffix = startTime.ToString("yyyyMMdd");
                 string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-                string fileName = $"LayoutLog_{startTimeString}.txt";
+                string fileName = $"LayoutLog_{FileNameSuffix}.txt";
                 logFilePath = Path.Combine(desktopPath, fileName);
 
                 // Write header (uses the Log method which now also prints to Debug)
@@ -88,7 +90,11 @@ namespace SharpBrowser.Controls // Use the same namespace as StackLayout
 
 
         // --- Public Logging Method (MODIFIED) ---
-        public static void Log(string message)
+        public static void Log(string message 
+            ,[CallerFilePath]string CallerFile="" 
+            ,[CallerMemberName]string CallerFunc=""
+            ,[CallerLineNumber]int CallerLineNo=-1
+            )
         {
             // Format the log entry with timestamp and thread ID
             string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");

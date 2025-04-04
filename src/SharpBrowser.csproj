@@ -31,6 +31,9 @@
     <Compile Update="Controls\BrowserTabStrip\BrowserTabStripItem.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Update="Controls\CustStackLayout\DesignerV2\StackLayout.HwndSwitch.cs">
+      <SubType>Component</SubType>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources\sharpbrowser.ico" />
@@ -45,8 +48,5 @@
   <ItemGroup>
     <Reference Include="System.Net" />
     <Reference Include="System.Web" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Controls\CustStackLayout\DesignerV2\" />
   </ItemGroup>
 </Project>
