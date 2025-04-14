@@ -347,54 +347,65 @@ namespace SharpBrowser.Controls
 
         #endregion
 
+
+
+
+
+
+
+
         #region Background Screen Drawing Task & Helpers (HwndExperimental Mode)
 
-        // Runs on Background Thread
+
+        // Runs on Background Thread - Gets DC/Graphics ONCE and passes it down
         private void DrawAdornersOnScreen_FromSnapshot(DesignTimeStateSnapshot snapshot)
         {
-            if (snapshot == null || !snapshot.IsValid)
-            { Interlocked.Exchange(ref _screenDrawTaskRunning, 0); return; } // Reset flag
+            if (snapshot == null || !snapshot.IsValid) { Interlocked.Exchange(ref _screenDrawTaskRunning, 0); return; }
 
-            // LayoutLogger.Log($"DrawAdornersOnScreen: Starting screen drawing task."); // Noisy
-            IntPtr screenDC = IntPtr.Zero; Graphics screenGraphics = null;
+            LayoutLogger.Log($"DrawAdornersOnScreen: Starting screen drawing task.");
+            IntPtr screenDC = IntPtr.Zero;
+            Graphics screenGraphics = null; // Single Graphics object for this task run
             try
             {
-                //Thread.Sleep(200); // User's timing hack - adjust as needed
-                Thread.Sleep(20); // User's timing hack - adjust as needed
+                Thread.Sleep(200); // Keep timing hack
 
-                screenDC = NativeMethods.GetDC(IntPtr.Zero); // Screen DC
+                // *** GET DC AND GRAPHICS ONCE ***
+                screenDC = NativeMethods.GetDC(IntPtr.Zero);
                 if (screenDC == IntPtr.Zero) { throw new Exception("Failed Screen DC."); }
                 screenGraphics = Graphics.FromHdc(screenDC);
                 if (screenGraphics == null) { throw new Exception("Failed Graphics from DC."); }
-
-                screenGraphics.SmoothingMode = SmoothingMode.AntiAlias; // Set desired quality
+                screenGraphics.SmoothingMode = SmoothingMode.AntiAlias; // Set quality
 
                 // Colors
                 Color stdConnectorBorder = Color.DimGray, stdConnectorFill = Color.FromArgb(240, 240, 240);
                 Color targetConnectorBorder = Color.DarkGray, targetConnectorFill = Color.FromArgb(220, 220, 220);
-                Color ConnectionLineColor = Color.DarkSlateBlue;
-                // Access instance colors (pass via snapshot if threading issues arise)
+                // Instance colors (capture for safety)
                 Color sourceIconColor = this.SourceConnectorConnectedColor;
                 Color targetIconColor = this.TargetConnectorConnectedColor;
 
-                // Create GDI objects locally using 'using' for proper disposal
+                // --- Create Pens/Brushes (Need disposal) ---
                 using (Pen stdBorderPen = new Pen(stdConnectorBorder, DesignTimeLineWidth))
                 using (SolidBrush stdFillBrush = new SolidBrush(stdConnectorFill))
                 using (Pen targetBorderPen = new Pen(targetConnectorBorder, DesignTimeLineWidth))
                 using (SolidBrush targetFillBrush = new SolidBrush(targetConnectorFill))
-                using (Pen connectionLinePen = new Pen(ConnectionLineColor, DesignTimeLineWidth) { StartCap = LineCap.RoundAnchor, EndCap = LineCap.RoundAnchor, LineJoin = LineJoin.Round })
-                using (Pen sourceBorderPen = new Pen(stdConnectorBorder, DesignTimeLineWidth)) // Border for source icon
+                using (Pen sourceBorderPen = new Pen(Color.DimGray, DesignTimeLineWidth)) // Example border
                 using (SolidBrush sourceDotBrush = new SolidBrush(sourceIconColor))
                 {
-                    ControlSnapshot selectedControlSnap = snapshot.VisibleControls.FirstOrDefault(c => c.Name == snapshot.SelectedControlName);
+                    // --- Pass screenGraphics to helpers ---
 
                     // 1. Draw Connectors on Selected Child
-                    bool isBreakingFromSelected = 
-                        (snapshot.CurrentDragMode == DesignDragMode.Breaking && snapshot.DragSourceControlName == snapshot.SelectedControlName);
+                    ControlSnapshot selectedControlSnap = snapshot.VisibleControls.FirstOrDefault(c => c.Name == snapshot.SelectedControlName);
+                    bool isBreakingFromSelected = (snapshot.CurrentDragMode == DesignDragMode.Breaking && snapshot.DragSourceControlName == snapshot.SelectedControlName);
                     if (selectedControlSnap != null && !isBreakingFromSelected)
-                    { DrawConnectionPointsOnScreen(screenGraphics, snapshot.PanelScreenLocation, selectedControlSnap, stdBorderPen, stdFillBrush, sourceBorderPen, sourceDotBrush, DesignTimeConnectorOffset, false); }
+                    {
+                        // Pass the single screenGraphics object
+                        DrawConnectionPointsOnScreen(screenGraphics, snapshot.PanelScreenLocation, selectedControlSnap,
+                                                     stdBorderPen, stdFillBrush, sourceBorderPen, sourceDotBrush,
+                                                     DesignTimeConnectorOffset, false);
+                    }
 
                     // 2. Draw Existing Connections
+                    // Pass the single screenGraphics object
                     DrawExistingConnectionsOnScreen(screenGraphics, snapshot);
 
                     // 3. Draw Drag Feedback
@@ -405,69 +416,116 @@ namespace SharpBrowser.Controls
 
                         if (snapshot.CurrentDragMode == DesignDragMode.Connecting && dragSourceSnap != null)
                         {
-                            // Potential target points
+                            // Draw potential target points
                             foreach (var controlSnap in snapshot.VisibleControls)
                             {
                                 if (controlSnap.Name != snapshot.DragSourceControlName && controlSnap.IsVisible)
-                                { DrawConnectionPointsOnScreen(screenGraphics, snapshot.PanelScreenLocation, controlSnap, targetBorderPen, targetFillBrush, null, null, DesignTimeConnectorOffset, true); }
+                                {
+                                    // Pass the single screenGraphics object
+                                    DrawConnectionPointsOnScreen(screenGraphics, snapshot.PanelScreenLocation, controlSnap,
+                                                                 targetBorderPen, targetFillBrush, null, null,
+                                                                 DesignTimeConnectorOffset, true);
+                                }
                             }
-                            // Drag line
-                            DrawDragLineOnScreen(screenGraphics, snapshot.PanelScreenLocation, dragSourceSnap, snapshot.DragStartConnectorType, snapshot.DragCurrentScreenPoint, Color.Blue, DesignTimeLineWidth, DesignTimeConnectorOffset);
+                            // Draw drag line
+                            // Pass the single screenGraphics object
+                            DrawDragLineOnScreen(screenGraphics, snapshot.PanelScreenLocation, dragSourceSnap, snapshot.DragStartConnectorType, snapshot.DragCurrentScreenPoint,
+                                                 Color.Blue, DesignTimeLineWidth, DesignTimeConnectorOffset);
                         }
                         else if (snapshot.CurrentDragMode == DesignDragMode.Breaking && breakTargetSnap != null)
-                        { DrawDragLineOnScreen(screenGraphics, snapshot.PanelScreenLocation, breakTargetSnap, snapshot.BreakTargetConnectorType, snapshot.DragCurrentScreenPoint, Color.Red, DesignTimeLineWidth, DesignTimeConnectorOffset); }
+                        {
+                            // Draw drag line
+                            // Pass the single screenGraphics object
+                            DrawDragLineOnScreen(screenGraphics, snapshot.PanelScreenLocation, breakTargetSnap, snapshot.BreakTargetConnectorType, snapshot.DragCurrentScreenPoint,
+                                                 Color.Red, DesignTimeLineWidth, DesignTimeConnectorOffset);
+                        }
                     }
-                } // Dispose pens/brushes
+                } // End using Pens/Brushes
             }
             catch (Exception ex) { LayoutLogger.Log($"DrawAdornersOnScreen: Error: {ex.Message}\n{ex.StackTrace}"); }
             finally
             {
-                screenGraphics?.Dispose(); // Dispose Graphics object
-                if (screenDC != IntPtr.Zero) { NativeMethods.ReleaseDC(IntPtr.Zero, screenDC); } // Release DC
-                Interlocked.Exchange(ref _screenDrawTaskRunning, 0); // Reset flag
-                                                                     // LayoutLogger.Log($"DrawAdornersOnScreen: Task finished."); // Noisy
+                // *** RELEASE DC AND GRAPHICS ONCE AT THE END ***
+                screenGraphics?.Dispose();
+                if (screenDC != IntPtr.Zero) { NativeMethods.ReleaseDC(IntPtr.Zero, screenDC); }
+                Interlocked.Exchange(ref _screenDrawTaskRunning, 0);
+                LayoutLogger.Log($"DrawAdornersOnScreen: Task finished.");
             }
         }
-
-        // --- Helper methods that draw on SCREEN graphics using snapshot ---
 
         // Draws connection points for ONE control onto the screen graphics
         private void DrawConnectionPointsOnScreen(Graphics screenGraphics, Point panelScreenOrigin, ControlSnapshot controlSnap,
                                                  Pen borderPen, Brush fillBrush, Pen sourceBorderPen, Brush sourceDotBrush,
                                                  int outwardOffset, bool forceStandard)
         {
-            if (controlSnap == null) return;
-            var connectorRectsPanel = GetConnectorRects(controlSnap.Bounds, outwardOffset); // Panel relative
+            // Safety check
+            if (screenGraphics == null || controlSnap == null) return;
+
+            // Calculate connector rects relative to the PANEL (Same as Direct Mode)
+            var connectorRectsPanel = GetConnectorRects(controlSnap.Bounds, outwardOffset);
 
             foreach (var kvp in connectorRectsPanel)
             {
-                PointType currentPointType = kvp.Key; Rectangle rectPanel = kvp.Value; if (rectPanel.IsEmpty) continue;
-                // Convert panel-relative rect to SCREEN coordinates
-                Rectangle rectScreen = new Rectangle(panelScreenOrigin.X + rectPanel.Left, panelScreenOrigin.Y + rectPanel.Top, rectPanel.Width, rectPanel.Height);
+                PointType currentPointType = kvp.Key;
+                Rectangle rectPanel = kvp.Value; // Panel-relative rectangle
+                if (rectPanel.IsEmpty) continue;
+
+                // Convert panel-relative rect to SCREEN coordinates for drawing
+                Rectangle rectScreen = new Rectangle(
+                    panelScreenOrigin.X + rectPanel.Left,
+                    panelScreenOrigin.Y + rectPanel.Top,
+                    rectPanel.Width,
+                    rectPanel.Height);
 
                 bool drawnSpecial = false;
                 if (!forceStandard)
                 {
+                    // Use snapshot data for connection state (Same logic as Direct Mode uses GetConnectionState)
                     if (controlSnap.IsConnectionSource && currentPointType == controlSnap.SourceConnector && sourceDotBrush != null && sourceBorderPen != null)
-                    { screenGraphics.FillEllipse(sourceDotBrush, rectScreen); screenGraphics.DrawEllipse(sourceBorderPen, rectScreen); drawnSpecial = true; }
+                    {
+                        // Draw Source Dot on Screen using passed Graphics
+                        screenGraphics.FillEllipse(sourceDotBrush, rectScreen);
+                        screenGraphics.DrawEllipse(sourceBorderPen, rectScreen);
+                        drawnSpecial = true;
+                    }
                     else if (controlSnap.IsConnectionTarget && currentPointType == controlSnap.TargetConnector)
                     {
+                        // Draw Target Arrow on Screen using passed Graphics
+                        // Create arrow pen (using instance color field - mirror Direct Mode behavior)
                         using (var arrowPen = new Pen(this.TargetConnectorConnectedColor, DesignTimeLineWidth * 1.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                        { DrawTargetArrowOnScreen(screenGraphics, rectScreen, arrowPen, currentPointType); }
+                        {
+                            // Pass SCREEN rectangle and graphics to the arrow drawing helper
+                            DrawTargetArrowOnScreen(screenGraphics, rectScreen, arrowPen, currentPointType);
+                        }
                         drawnSpecial = true;
-                    } // Pass screen rect
+                    }
                 }
-                if (!drawnSpecial && fillBrush != null && borderPen != null)
-                { screenGraphics.FillEllipse(fillBrush, rectScreen); screenGraphics.DrawEllipse(borderPen, rectScreen); }
+
+                if (!drawnSpecial) // Draw standard empty circle
+                {
+                    if (fillBrush != null && borderPen != null)
+                    {
+                        // Draw standard connector on Screen using passed Graphics
+                        screenGraphics.FillEllipse(fillBrush, rectScreen);
+                        screenGraphics.DrawEllipse(borderPen, rectScreen);
+                    }
+                }
             }
         }
 
         // Draws just the target arrow shape onto screen graphics at the given screen rectangle
+        // ACCEPTS the passed screenGraphics object
         private void DrawTargetArrowOnScreen(Graphics screenGraphics, Rectangle rectScreen, Pen arrowPen, PointType direction)
         {
-            if (rectScreen.IsEmpty) return; Point centerScreen = GetCenter(rectScreen); // Center is screen coords
-            int arrowLength = (int)(DesignTimeConnectorSize * 0.70f), arrowHalfWidth = (int)(DesignTimeConnectorSize * 0.30f);
-            Point pTip, pWingLeft, pWingRight; // Screen coords
+            // Safety check
+            if (screenGraphics == null || rectScreen.IsEmpty) return;
+
+            Point centerScreen = GetCenter(rectScreen); // Center is now in screen coords
+
+            int arrowLength = (int)(DesignTimeConnectorSize * 0.70f);
+            int arrowHalfWidth = (int)(DesignTimeConnectorSize * 0.30f);
+            Point pTip, pWingLeft, pWingRight; // These will be screen coords
+
             switch (direction)
             { /* Calculation logic using centerScreen - same formulas as before */
                 case PointType.Top: pTip = new Point(centerScreen.X, centerScreen.Y + arrowLength / 2); pWingLeft = new Point(centerScreen.X - arrowHalfWidth, centerScreen.Y - arrowLength / 2); pWingRight = new Point(centerScreen.X + arrowHalfWidth, centerScreen.Y - arrowLength / 2); break;
@@ -475,74 +533,138 @@ namespace SharpBrowser.Controls
                 case PointType.Left: pTip = new Point(centerScreen.X + arrowLength / 2, centerScreen.Y); pWingLeft = new Point(centerScreen.X - arrowLength / 2, centerScreen.Y - arrowHalfWidth); pWingRight = new Point(centerScreen.X - arrowLength / 2, centerScreen.Y + arrowHalfWidth); break;
                 case PointType.Right: default: pTip = new Point(centerScreen.X - arrowLength / 2, centerScreen.Y); pWingLeft = new Point(centerScreen.X + arrowLength / 2, centerScreen.Y - arrowHalfWidth); pWingRight = new Point(centerScreen.X + arrowLength / 2, centerScreen.Y + arrowHalfWidth); break;
             }
-            screenGraphics.DrawLine(arrowPen, pWingLeft, pTip); screenGraphics.DrawLine(arrowPen, pWingRight, pTip);
+            // Use the passed screenGraphics object
+            screenGraphics.DrawLine(arrowPen, pWingLeft, pTip);
+            screenGraphics.DrawLine(arrowPen, pWingRight, pTip);
         }
 
+        // Draws drag line onto screen graphics
+        // ACCEPTS the passed screenGraphics object
+        private void DrawDragLineOnScreen(Graphics screenGraphics, Point panelScreenOrigin, ControlSnapshot startControlSnap, PointType startPointType, Point currentScreenPoint, // End is already screen
+                                         Color lineColor, float lineWidth, int outwardOffset)
+        {
+            // Safety check
+            if (screenGraphics == null || startControlSnap == null || startPointType == PointType.None) return;
+
+            var startRectsPanel = GetConnectorRects(startControlSnap.Bounds, outwardOffset);
+            if (startRectsPanel.TryGetValue(startPointType, out var startConnRectPanel) && !startConnRectPanel.IsEmpty)
+            {
+                Point startPtPanel = GetCenter(startConnRectPanel);
+                // Convert start point to screen coordinates
+                Point startPtScreen = new Point(panelScreenOrigin.X + startPtPanel.X, panelScreenOrigin.Y + startPtPanel.Y);
+                Point endPtScreen = currentScreenPoint; // End point is already screen coordinates
+
+                using (Pen tempPen = new Pen(lineColor, lineWidth) { DashStyle = DashStyle.Dash })
+                {
+                    try
+                    {
+                        // Use the passed screenGraphics object
+                        screenGraphics.DrawLine(tempPen, startPtScreen, endPtScreen);
+                    }
+                    catch (Exception ex) { LayoutLogger.Log($"DrawDragLineOnScreen Error: {ex.Message}"); }
+                }
+            }
+        }
+
+
+
         // Draws existing connections onto screen graphics using snapshot data
-        // Draws existing connections onto screen graphics using snapshot data
-        // Draws existing connections onto screen graphics using snapshot data
-        // Draws existing connections onto screen graphics using snapshot data
+        // ACCEPTS the single screenGraphics object passed from the main task method
         private void DrawExistingConnectionsOnScreen(Graphics screenGraphics, DesignTimeStateSnapshot snapshot)
         {
-            if (snapshot?.Connections == null) return;
+            // ... [Initial null checks and dictionary creation] ...
+            if (screenGraphics == null || snapshot?.Connections == null || snapshot.VisibleControls == null) { /* ... */ return; }
             Point panelOrigin = snapshot.PanelScreenLocation;
-            var controlsDic = snapshot.VisibleControls.ToDictionary(cs => cs.Name);
+            Dictionary<string, ControlSnapshot> controlsDic = null;
+            try { controlsDic = snapshot.VisibleControls.Where(cs => !string.IsNullOrEmpty(cs.Name)).ToDictionary(cs => cs.Name); }
+            catch (ArgumentException argEx) { LayoutLogger.Log($"ERROR creating control dict: {argEx.Message}"); return; }
+            if (controlsDic == null || controlsDic.Count == 0) return;
+
+            Color currentSourceColor = this.SourceConnectorConnectedColor;
+            Color currentTargetColor = this.TargetConnectorConnectedColor;
 
             using (Pen linePen = new Pen(ConnectionLineColor, DesignTimeLineWidth) { StartCap = LineCap.RoundAnchor, EndCap = LineCap.RoundAnchor, LineJoin = LineJoin.Round })
             using (Pen sourceBorderPen = new Pen(Color.DimGray, DesignTimeLineWidth))
-            using (SolidBrush sourceDotBrush = new SolidBrush(this.SourceConnectorConnectedColor))
+            using (SolidBrush sourceDotBrush = new SolidBrush(currentSourceColor))
             {
                 foreach (var kvpConnection in snapshot.Connections)
                 {
-                    string sourceName = kvpConnection.Key;
-                    ConnectionInfo connInfo = kvpConnection.Value;
-                    string targetName = connInfo.TargetName;
-
-                    if (controlsDic.TryGetValue(sourceName, out ControlSnapshot sourceSnap) &&
-                        controlsDic.TryGetValue(targetName, out ControlSnapshot targetSnap))
+                    string sourceName = kvpConnection.Key; ConnectionInfo connInfo = kvpConnection.Value; string targetName = connInfo.TargetName;
+                    if (controlsDic.TryGetValue(sourceName, out var sourceSnap) && controlsDic.TryGetValue(targetName, out var targetSnap))
                     {
-                        // --- Determine ICON Connection Points (Panel Relative) ---
-                        // We still need these to know where to draw the dot and arrow icons,
-                        // even though the line starts from the TopLeft.
-                        PointType targetIconPointType = MapAlignmentToConnector(connInfo.Alignment);
-                        PointType sourceIconPointType = GetOppositeConnectorType(targetIconPointType);
-                        if (sourceIconPointType == PointType.None) sourceIconPointType = GetClosestConnectionPointType(sourceSnap.Bounds, GetCenter(targetSnap.Bounds));
-                        if (targetIconPointType == PointType.None)
+                        // --- Determine ICON Connection Points & Reroute Logic (Panel Relative) ---
+
+                        // 1. Determine INITIAL types for ICONS based on alignment and opposite/closest
+                        PointType initialTargetIconPointType = MapAlignmentToConnector(connInfo.Alignment);
+                        PointType initialSourceIconPointType = GetOppositeConnectorType(initialTargetIconPointType);
+                        // Fallbacks if alignment is None or opposite doesn't work well
+                        if (initialSourceIconPointType == PointType.None)
                         {
-                            LayoutLogger.Log($"Skipping connection {sourceName}->{targetName}: Invalid Target Alignment {connInfo.Alignment}");
-                            continue; // Cannot draw line or target icon without valid target type
+                            initialSourceIconPointType = GetClosestConnectionPointType(sourceSnap.Bounds, GetCenter(targetSnap.Bounds));
+                        }
+                        if (initialTargetIconPointType == PointType.None)
+                        {
+                            initialTargetIconPointType = GetClosestConnectionPointType(targetSnap.Bounds, GetCenter(sourceSnap.Bounds));
+                            if (initialTargetIconPointType == PointType.None) continue; // Cannot proceed if target is still None
+                        }
+                        // Fallback for source if still None after closest (unlikely but possible)
+                        if (initialSourceIconPointType == PointType.None)
+                        {
+                            initialSourceIconPointType = GetClosestConnectionPointType(sourceSnap.Bounds, GetCenter(targetSnap.Bounds));
+                            if (initialSourceIconPointType == PointType.None) continue; // Cannot proceed if source is None
                         }
 
+
+                        // 2. Get all potential connector rectangles (Panel Relative)
                         var sourceRectsPanel = GetConnectorRects(sourceSnap.Bounds, DesignTimeConnectorOffset);
                         var targetRectsPanel = GetConnectorRects(targetSnap.Bounds, DesignTimeConnectorOffset);
 
-                        Rectangle sourceIconConnRectPanel, targetIconConnRectPanel;
-                        Point targetIconCenterPanel; // Only need center for target line end
+                        // 3. Get INITIAL points based on INITIAL icon types (for overlap check)
+                        Point initialStartPtPanel = Point.Empty, initialEndPtPanel = Point.Empty;
+                        if (sourceRectsPanel.TryGetValue(initialSourceIconPointType, out var initSourceRect)) initialStartPtPanel = GetCenter(initSourceRect); else continue; // Cannot check overlap without start point
+                        if (targetRectsPanel.TryGetValue(initialTargetIconPointType, out var initTargetRect)) initialEndPtPanel = GetCenter(initTargetRect); else continue; // Cannot check overlap without end point
 
-                        if (!sourceRectsPanel.TryGetValue(sourceIconPointType, out sourceIconConnRectPanel) ||
-                            !targetRectsPanel.TryGetValue(targetIconPointType, out targetIconConnRectPanel) ||
-                            sourceIconConnRectPanel.IsEmpty || targetIconConnRectPanel.IsEmpty)
+                        // 4. Determine FINAL types/rects for ICON drawing (these don't usually change unless we force icons elsewhere)
+                        // For now, final icon types ARE the initial icon types.
+                        PointType finalSourceIconPointType = initialSourceIconPointType;
+                        PointType finalTargetIconPointType = initialTargetIconPointType;
+
+                        // Get the rectangles for drawing the final icons
+                        if (!sourceRectsPanel.TryGetValue(finalSourceIconPointType, out Rectangle finalSourceIconRectPanel) ||
+                            !targetRectsPanel.TryGetValue(finalTargetIconPointType, out Rectangle finalTargetIconRectPanel) ||
+                            finalSourceIconRectPanel.IsEmpty || finalTargetIconRectPanel.IsEmpty)
                         {
-                            LayoutLogger.Log($"Skipping connection {sourceName}->{targetName}: Could not get valid ICON connector rects.");
-                            continue; // Skip if icon points invalid
+                            LayoutLogger.Log($" -> Could not get FINAL ICON rects for {sourceName}->{targetName}. Skipping.");
+                            continue; // Skip if final icon rects are invalid
                         }
-                        targetIconCenterPanel = GetCenter(targetIconConnRectPanel);
+                        // --- END OF SECTION TO FILL ---
 
 
-                        // --- Calculate Orthogonal Path (Using NEW Function) ---
-                        Point sourceTopLeftPanel = sourceSnap.Bounds.Location; // Get source TopLeft
+                        // --- Determine PATH types based on overlap/rerouting logic ---
+                        PointType pathSourceType = initialSourceIconPointType; // Start assuming path uses icon types
+                        PointType pathTargetType = initialTargetIconPointType;
+                        bool rerouted = false;
+                        if ((initialSourceIconPointType == PointType.Left && initialTargetIconPointType == PointType.Right && initialStartPtPanel.X >= initialEndPtPanel.X) || (initialSourceIconPointType == PointType.Right && initialTargetIconPointType == PointType.Left && initialStartPtPanel.X <= initialEndPtPanel.X))
+                        { pathSourceType = PointType.Top; pathTargetType = PointType.Top; rerouted = true; } // Reroute path vertically
+                        else if ((initialSourceIconPointType == PointType.Top && initialTargetIconPointType == PointType.Bottom && initialStartPtPanel.Y >= initialEndPtPanel.Y) || (initialSourceIconPointType == PointType.Bottom && initialTargetIconPointType == PointType.Top && initialStartPtPanel.Y <= initialEndPtPanel.Y))
+                        { pathSourceType = PointType.Left; pathTargetType = PointType.Left; rerouted = true; } // Reroute path horizontally
 
-                        // *** CALL THE NEW PATH FUNCTION ***
+
+                        // --- Calculate Orthogonal Path (Panel Relative) ---
+                        // Path starts from Source TopLeft, ends at Target Icon Center
+                        // Uses PATH types determined above for routing
+                        Point sourceTopLeftPanel = sourceSnap.Bounds.Location;
+                        Point targetIconCenterPanel = GetCenter(finalTargetIconRectPanel); // Center of where target icon goes
+
                         List<Point> pathPanel = CalculateOrthogonalPath_TopLeftSource(
-                            sourceTopLeftPanel,         // Start from source TopLeft
-                            targetIconCenterPanel,      // End at TARGET connector center
-                            targetIconPointType,        // Use TARGET connector type for routing logic
-                            DesignTimeLineRoutingMargin // Pass margin
+                            sourceTopLeftPanel,         // Start visually from source TopLeft
+                            targetIconCenterPanel,      // End logically near target icon center
+                            pathTargetType,             // Use PATH target type for routing
+                            DesignTimeLineRoutingMargin
                         );
 
+                        LayoutLogger.Log($"Path Calc (TL Source) for {sourceName}->{targetName}: TargetPathType={pathTargetType}, Points={(pathPanel?.Count ?? 0)}. Rerouted={rerouted}");
 
-                        // --- Logging for Debugging ---
-                        LayoutLogger.Log($"Path Calc (TL Source) for {sourceName}->{targetName}: TargetType={targetIconPointType}, Points={(pathPanel?.Count ?? 0)}.");
 
                         // --- Draw Path and Icons on Screen ---
                         if (pathPanel != null && pathPanel.Count >= 2)
@@ -550,41 +672,30 @@ namespace SharpBrowser.Controls
                             Point[] pathScreen = pathPanel.Select(p => new Point(panelOrigin.X + p.X, panelOrigin.Y + p.Y)).ToArray();
                             try
                             {
+                                // --- Draw Lines ---
                                 screenGraphics.DrawLines(linePen, pathScreen);
-                                LayoutLogger.Log($" -> DrawLines called for {sourceName}->{targetName}");
+                                // LayoutLogger.Log($" -> DrawLines attempted for {sourceName}->{targetName}");
+
+                                // --- Draw Icons (Using FINAL ICON types and Rects converted to screen) ---
+                                // Source Dot
+                                Rectangle sourceIconRectScreen = new Rectangle(panelOrigin.X + finalSourceIconRectPanel.X, panelOrigin.Y + finalSourceIconRectPanel.Y, finalSourceIconRectPanel.Width, finalSourceIconRectPanel.Height);
+                                screenGraphics.FillEllipse(sourceDotBrush, sourceIconRectScreen);
+                                screenGraphics.DrawEllipse(sourceBorderPen, sourceIconRectScreen);
+
+                                // Target Arrow
+                                Rectangle targetIconRectScreen = new Rectangle(panelOrigin.X + finalTargetIconRectPanel.X, panelOrigin.Y + finalTargetIconRectPanel.Y, finalTargetIconRectPanel.Width, finalTargetIconRectPanel.Height);
+                                using (var arrowPen = new Pen(currentTargetColor, DesignTimeLineWidth * 1.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                                { DrawTargetArrowOnScreen(screenGraphics, targetIconRectScreen, arrowPen, finalTargetIconPointType); } // Use FINAL target icon type
                             }
-                            catch (Exception ex) { LayoutLogger.Log($" -> DrawLines FAILED for {sourceName}->{targetName}: {ex.Message}"); }
-
-                            // --- Draw Icons on Screen (at their original connector locations) ---
-                            // Source Dot (at determined sourceIconPointType location)
-                            Rectangle sourceIconRectScreen = new Rectangle(panelOrigin.X + sourceIconConnRectPanel.X, panelOrigin.Y + sourceIconConnRectPanel.Y, sourceIconConnRectPanel.Width, sourceIconConnRectPanel.Height);
-                            screenGraphics.FillEllipse(sourceDotBrush, sourceIconRectScreen);
-                            screenGraphics.DrawEllipse(sourceBorderPen, sourceIconRectScreen);
-
-                            // Target Arrow (at determined targetIconPointType location)
-                            Rectangle targetIconRectScreen = new Rectangle(panelOrigin.X + targetIconConnRectPanel.X, panelOrigin.Y + targetIconConnRectPanel.Y, targetIconConnRectPanel.Width, targetIconConnRectPanel.Height);
-                            using (var arrowPen = new Pen(this.TargetConnectorConnectedColor, DesignTimeLineWidth * 1.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                            { DrawTargetArrowOnScreen(screenGraphics, targetIconRectScreen, arrowPen, targetIconPointType); }
+                            catch (Exception ex) { LayoutLogger.Log($" -> Drawing FAILED for {sourceName}->{targetName}: {ex.Message}"); }
+                            // No finally block needed here for DC/Graphics
                         }
                         else { LayoutLogger.Log($" -> DrawLines SKIPPED for {sourceName}->{targetName} due to invalid path."); }
-                    }
-                }
-            }
-        } // End Method
-        private void DrawDragLineOnScreen(Graphics screenGraphics, Point panelScreenOrigin, ControlSnapshot startControlSnap, PointType startPointType, Point currentScreenPoint, // End is already screen
-                                         Color lineColor, float lineWidth, int outwardOffset)
-        {
-            if (startControlSnap == null || startPointType == PointType.None) return;
-            var startRectsPanel = GetConnectorRects(startControlSnap.Bounds, outwardOffset);
-            if (startRectsPanel.TryGetValue(startPointType, out var startConnRectPanel) && !startConnRectPanel.IsEmpty)
-            {
-                Point startPtPanel = GetCenter(startConnRectPanel);
-                // Convert start point to screen coordinates
-                Point startPtScreen = new Point(panelScreenOrigin.X + startPtPanel.X, panelScreenOrigin.Y + startPtPanel.Y);
-                Point endPtScreen = currentScreenPoint; // End point is already screen
-                using (Pen tempPen = new Pen(lineColor, lineWidth) { DashStyle = DashStyle.Dash }) { screenGraphics.DrawLine(tempPen, startPtScreen, endPtScreen); } // Draw on screen
-            }
-        }
+                    } // End if snapshots found
+                } // End foreach connection
+            } // End Using Pens/Brushes
+        } // End DrawExistingConnectionsOnScreen Method
+
         #endregion
 
         #region Methods for Direct Drawing Mode (Using IDesignTimeDrawer)
@@ -1025,7 +1136,7 @@ namespace SharpBrowser.Controls
 
         #endregion
 
-
+     
 
         #region Design-Time Mouse Event Overrides & Selection Change
 
